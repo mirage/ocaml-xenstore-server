@@ -41,7 +41,7 @@ let destroy t =
   Hashtbl.remove table t.handle;
   return ()
 
-let cstruct t = t.buffer
+let get_cstruct t = t.buffer
 let handle t = t.handle
 
 let lookup handle =

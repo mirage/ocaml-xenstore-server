@@ -22,8 +22,8 @@ val create: int -> t Lwt.t
 val destroy: t -> unit Lwt.t
 (** [destroy t]: permanently deallocates the persistent buffer [t] *)
 
-val cstruct: t -> Cstruct.t
-(** [cstruct t] returns the Cstruct.t associated with [t] *)
+val get_cstruct: t -> Cstruct.t
+(** [get_cstruct t] returns the Cstruct.t associated with [t] *)
 
 type handle = int64
 (** A handle which can be persisted in a store, and then used to lookup the

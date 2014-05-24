@@ -21,6 +21,7 @@ let ( |> ) a b = b a
 let ( ++ ) f g x = f (g x)
 
 let debug fmt = Logging.debug "server" fmt
+let info fmt  = Logging.info "server" fmt
 let error fmt = Logging.error "server" fmt
 
 let fail_on_error = function
@@ -65,13 +66,12 @@ module Make = functor(T: S.TRANSPORT) -> struct
   (* We store the next whole packet to transmit in this persistent buffer.
      The contents are only valid iff valid <> 0 *)
   cstruct buffer {
-    uint32_t length; (* total number of payload bytes in buffer. *)
+    uint16_t length; (* total number of payload bytes in buffer. *)
     uint64_t offset; (* offset in the output stream to write first byte *)
-    uint8_t buffer[4096 + 16];
+    uint8_t buffer[5012];
     uint8_t valid;   (* 1 means buffer contains valid data *)
   } as little_endian
-  let _ = assert(16 = Protocol.Header.sizeof)
-  let _ = assert(4096 = Protocol.xenstore_payload_max)
+  let _ = assert(5012 = Protocol.xenstore_payload_max + Protocol.Header.sizeof)
 
 	let handle_connection t =
 		lwt address = T.address_of t in
@@ -80,10 +80,12 @@ module Make = functor(T: S.TRANSPORT) -> struct
 		Connection.create (address, dom) >>= fun c ->
     let special_path name = [ "tool"; "xenstored"; name; (match Uri.scheme address with Some x -> x | None -> "unknown"); string_of_int (Connection.index c) ] in
 
-    let output = PCstruct.create sizeof_buffer in
+    PCstruct.create sizeof_buffer >>= fun poutput ->
+    let output = PCstruct.get_cstruct poutput in
     set_buffer_offset output 0L;
     set_buffer_valid output 0;
-    let input = PCstruct.create sizeof_buffer in
+    PCstruct.create sizeof_buffer >>= fun pinput ->
+    let input = PCstruct.get_cstruct pinput in
     set_buffer_valid input 0;
 
     (* XXX: write the input, output handles to the store *)
@@ -93,7 +95,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
     (* Flush any pending output to the channel. This function can suffer a crash and
        restart at any point. On exit, the output buffer is invalid and the whole
        packet has been transmitted. *)
-    let flush () =
+    let rec flush () =
       let valid = get_buffer_valid output in
       if valid = 0
       then return () (* no outstanding data to flush *)
@@ -116,7 +118,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
         (* 2. write as much as there is space for *)
         let to_write = min (Cstruct.len space) (Cstruct.len space') in
         Cstruct.blit space 0 space' 0 to_write;
-        let next_offset' = Int64.(add offset' (of_int to_write)) in
+        let next_offset = Int64.(add offset' (of_int to_write)) in
         T.Writer.ack t next_offset >>= fun () ->
         let remaining = to_write - (Cstruct.len space) in
         if remaining = 0
@@ -133,15 +135,15 @@ module Make = functor(T: S.TRANSPORT) -> struct
         let reply_buf = get_buffer_buffer output in
         let next = Protocol.Response.marshal response (Cstruct.shift reply_buf Protocol.Header.sizeof) in
         let length = next.Cstruct.off in
-        let hdr = { Header.tid = 0l; rid = 0l; ty = Protocol.Response.get_ty response; length = length - Protocol.Header.sizeof} in
+        let hdr = { Header.tid = 0l; rid = 0l; ty = Protocol.Response.get_ty response; len = length - Protocol.Header.sizeof} in
         ignore (Protocol.Header.marshal hdr reply_buf);
-        T.Writer.next t >>= (fun (offset, _)) ->
+        T.Writer.next t >>= fun (offset, _) ->
         if offset <> write_ofs
         then info "Dropping packet because output stream has advanced. This should only happen over a restart."
         else begin
-          set_output_offset output offset;
-          set_output_length output length;
-          set_output_valid  output 1;
+          set_buffer_offset output offset;
+          set_buffer_length output length;
+          set_buffer_valid  output 1;
         end;
         return Int64.(add offset (of_int length))
       end in
@@ -167,7 +169,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
     (* [fill ()] fills up input with the next request. This function can crash and
        be restarted at any point. On exit, a whole packet is available for unmarshalling
        and the next packet is still on the ring. *)
-    let fill () =
+    let rec fill () =
       (* if the buffer is invalid then initialise it *)
       ( if get_buffer_valid input = 0 then begin
           T.Reader.next t >>= fun (offset', _) ->
@@ -184,9 +186,8 @@ module Make = functor(T: S.TRANSPORT) -> struct
         then return (Protocol.Header.sizeof - length)
         else begin
           (* if we have the header then we know how long the payload is *)
-          if length >= Protocol.Header.sizeof then begin
-            fail_on_error (Protocol.Header.unmarshal buffer) >>= fun hdr ->
-            return (Protocol.Header.sizeof + t.Protocol.Header.len - length)
+          fail_on_error (Protocol.Header.unmarshal buffer) >>= fun hdr ->
+          return (Protocol.Header.sizeof + hdr.Protocol.Header.len - length)
         end ) >>= fun bytes_needed ->
       if bytes_needed = 0
       then return () (* packet ready for reading, stream positioned at next packet *)
@@ -213,22 +214,26 @@ module Make = functor(T: S.TRANSPORT) -> struct
         fill ()
       end in
 
-    let read read_ofs =
+    let rec read read_ofs =
       fill () >>= fun () ->
       let read_ofs' = get_buffer_offset input in
       if read_ofs = read_ofs' then begin
           info "Dropping input packet because we've already read it before. This should only happen over a restart.";
-          return ()
+          set_buffer_valid input 0;
+          read read_ofs
       end else begin
         let buffer = get_buffer_buffer input in
         fail_on_error (Protocol.Header.unmarshal buffer) >>= fun hdr ->
         let payload = Cstruct.sub buffer Protocol.Header.sizeof hdr.Protocol.Header.len in
-        match Protocol.Request.unmarshal hdr payload_buf with
+        match Protocol.Request.unmarshal hdr payload with
         | `Ok r ->
           return (read_ofs', `Ok (hdr, r))
         | `Error e ->
-          return (read_ofs', `Error e)) in
-      end
+          return (read_ofs', `Error e)
+      end in
+
+    let write_m = Lwt_mutex.create () in
+    Lwt_mutex.lock write_m >>= fun () ->
 
 		let (background_watch_event_flusher: unit Lwt.t) =
 			while_lwt true do
@@ -261,7 +266,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
         ( match r.response with
           | None -> return r.write_ofs (* always 0L *)
           | Some response -> write r.write_ofs response
-        ) >>= write_ofs ->
+        ) >>= fun write_ofs ->
         Lwt_mutex.unlock write_m;
 
         (* Read the next request, parse, and compute the response actions.
@@ -317,8 +322,6 @@ module Make = functor(T: S.TRANSPORT) -> struct
 			Lwt.cancel background_watch_event_flusher;
 			Connection.destroy address >>= fun () ->
       Mount.unmount connection_path >>= fun () ->
-      PReader.destroy reader >>= fun () ->
-      PWriter.destroy writer >>= fun () ->
       PResponse.destroy presponse >>= fun () ->
       Quota.remove dom >>= fun () ->
       T.destroy t
