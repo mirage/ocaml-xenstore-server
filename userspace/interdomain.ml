@@ -26,7 +26,7 @@ open Introduce
 let debug fmt = Logging.debug "xs_transport_xen" fmt
 let error fmt = Logging.error "xs_transport_xen" fmt
 
-type channel = {
+type connection = {
   address: address;
   page: Io_page.t;
   ring: Cstruct.t;
@@ -38,8 +38,8 @@ type channel = {
 (* Thrown when an attempt is made to read or write to a closed ring *)
 exception Ring_shutdown
 
-let domains : (int, channel) Hashtbl.t = Hashtbl.create 128
-let by_port : (int, channel) Hashtbl.t = Hashtbl.create 128
+let domains : (int, connection) Hashtbl.t = Hashtbl.create 128
+let by_port : (int, connection) Hashtbl.t = Hashtbl.create 128
 
 let xenstored_proc_port = "/proc/xen/xsd_port"
 let xenstored_proc_kva  = "/proc/xen/xsd_kva"
@@ -173,7 +173,7 @@ let create () =
   failwith "It's not possible to directly 'create' an interdomain ring."
 
 module Reader = struct
-  type t = channel
+  type t = connection
 
   let rec next t =
     let seq, available = Xenstore_ring.Ring.Back.read_prepare t.ring in
@@ -181,7 +181,7 @@ module Reader = struct
     if available_bytes = 0 then begin
       Lwt_condition.wait t.c >>= fun () ->
       next t
-    end else return (Int64.of_int32 seq, available) 
+    end else return (Int64.of_int32 seq, available)
 
   let ack t seq =
     Xenstore_ring.Ring.Back.read_commit t.ring (Int64.to_int32 seq);
@@ -212,7 +212,7 @@ let read t buf =
   loop buf
 
 module Writer = struct
-  type t = channel
+  type t = connection
   let rec next t =
     let seq, available = Xenstore_ring.Ring.Back.write_prepare t.ring in
     let available_bytes = Cstruct.len available in

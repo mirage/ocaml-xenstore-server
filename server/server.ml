@@ -36,7 +36,7 @@ type response = {
   write_ofs: int64;                       (* in the future I will write this byte *)
 } with sexp
 
-let no_response = { response = None; side_effects = Transaction.no_side_effects (); read_ofs = -1L; write_ofs = 0L }
+let no_response = { response = None; side_effects = Transaction.no_side_effects (); read_ofs = -2L; write_ofs = -1L }
 
 module Make = functor(T: S.TRANSPORT) -> struct
 
@@ -68,16 +68,16 @@ module Make = functor(T: S.TRANSPORT) -> struct
   cstruct buffer {
     uint16_t length; (* total number of payload bytes in buffer. *)
     uint64_t offset; (* offset in the output stream to write first byte *)
-    uint8_t buffer[5012];
+    uint8_t buffer[4112];
     uint8_t valid;   (* 1 means buffer contains valid data *)
   } as little_endian
-  let _ = assert(5012 = Protocol.xenstore_payload_max + Protocol.Header.sizeof)
+  let _ = assert(4112 = Protocol.xenstore_payload_max + Protocol.Header.sizeof)
 
-	let handle_connection t =
-		lwt address = T.address_of t in
+  let handle_connection t =
+    lwt address = T.address_of t in
     let dom = T.domain_of t in
-		let interface = introspect t in
-		Connection.create (address, dom) >>= fun c ->
+    let interface = introspect t in
+    Connection.create (address, dom) >>= fun c ->
     let special_path name = [ "tool"; "xenstored"; name; (match Uri.scheme address with Some x -> x | None -> "unknown"); string_of_int (Connection.index c) ] in
 
     PCstruct.create sizeof_buffer >>= fun poutput ->
@@ -97,9 +97,10 @@ module Make = functor(T: S.TRANSPORT) -> struct
        packet has been transmitted. *)
     let rec flush () =
       let valid = get_buffer_valid output in
-      if valid = 0
-      then return () (* no outstanding data to flush *)
-      else begin
+      if valid = 0 then begin
+      Printf.fprintf stderr "flush: no data\n%!";
+        return () (* no outstanding data to flush *)
+      end else begin
         let offset = get_buffer_offset output in
         let length = get_buffer_length output in
         T.Writer.next t >>= fun (offset', space') ->
@@ -119,6 +120,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
         let to_write = min (Cstruct.len space) (Cstruct.len space') in
         Cstruct.blit space 0 space' 0 to_write;
         let next_offset = Int64.(add offset' (of_int to_write)) in
+        Printf.fprintf stderr "write acking %Ld\n%!" next_offset;
         T.Writer.ack t next_offset >>= fun () ->
         let remaining = to_write - (Cstruct.len space) in
         if remaining = 0
@@ -128,21 +130,24 @@ module Make = functor(T: S.TRANSPORT) -> struct
 
     (* Enqueue an output packet. This assumes that the output buffer is empty. *)
     let marshal write_ofs response =
-      let length = get_buffer_length output in
-      if length <> 0
-      then fail (Failure (Printf.sprintf "We cannot marshal a response to the output buffer because it is already full (length = %d)" length))
+      if get_buffer_valid output = 1
+      then fail (Failure "We cannot marshal a response to the output buffer because it is already full")
       else begin
         let reply_buf = get_buffer_buffer output in
-        let next = Protocol.Response.marshal response (Cstruct.shift reply_buf Protocol.Header.sizeof) in
-        let length = next.Cstruct.off in
-        let hdr = { Header.tid = 0l; rid = 0l; ty = Protocol.Response.get_ty response; len = length - Protocol.Header.sizeof} in
+        let payload_buf = Cstruct.shift reply_buf Protocol.Header.sizeof in
+
+        Printf.fprintf stderr "<- %s\n%!" (Sexp.to_string (Response.sexp_of_t response));
+        let next = Protocol.Response.marshal response payload_buf in
+        let length = next.Cstruct.off - payload_buf.Cstruct.off in
+        let hdr = { Header.tid = 0l; rid = 0l; ty = Protocol.Response.get_ty response; len = length} in
         ignore (Protocol.Header.marshal hdr reply_buf);
         T.Writer.next t >>= fun (offset, _) ->
-        if offset <> write_ofs
-        then info "Dropping packet because output stream has advanced. This should only happen over a restart."
-        else begin
+        if offset <> write_ofs then begin
+          Printf.fprintf stderr "marshal dropping data offset=%Ld write_ofs=%Ld" offset write_ofs;
+          info "Dropping packet because output stream has advanced. This should only happen over a restart."
+        end else begin
           set_buffer_offset output offset;
-          set_buffer_length output length;
+          set_buffer_length output (length + Protocol.Header.sizeof);
           set_buffer_valid  output 1;
         end;
         return Int64.(add offset (of_int length))
@@ -150,6 +155,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
 
     (* [write response] marshals [response] in the output stream. *)
     let write write_ofs =
+      Printf.fprintf stderr "write write_ofs=%Ld\n%!" write_ofs;
 		  let m = Lwt_mutex.create () in
       fun response ->
         Lwt_mutex.with_lock m
@@ -162,7 +168,9 @@ module Make = functor(T: S.TRANSPORT) -> struct
               | false ->
                 return () ) >>= fun () ->
             marshal write_ofs response >>= fun write_ofs ->
+            Printf.fprintf stderr "calling flush()\n%!";
             flush () >>= fun () ->
+            Printf.fprintf stderr "write returning %Ld\n%!" write_ofs;
             return write_ofs
           ) in
 
@@ -176,6 +184,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
           set_buffer_offset input offset';
           set_buffer_length input 0;
           set_buffer_valid  input 1;
+          Printf.fprintf stderr "offset = %Ld\n%!" offset';
           return ()
         end else return () ) >>= fun () ->
       (* compute the maximum number of bytes we definitely need *)
@@ -189,6 +198,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
           fail_on_error (Protocol.Header.unmarshal buffer) >>= fun hdr ->
           return (Protocol.Header.sizeof + hdr.Protocol.Header.len - length)
         end ) >>= fun bytes_needed ->
+      Printf.fprintf stderr "bytes_needed = %d\n%!" bytes_needed;
       if bytes_needed = 0
       then return () (* packet ready for reading, stream positioned at next packet *)
       else begin
@@ -206,30 +216,38 @@ module Make = functor(T: S.TRANSPORT) -> struct
             else return (offset, space') ) >>= fun (offset', space') ->
         (* 2. read as much as there is space for *)
         let to_copy = min (Cstruct.len space) (Cstruct.len space') in
+        Printf.fprintf stderr "copying %d bytes\n%!" to_copy;
         Cstruct.blit space' 0 space 0 to_copy;
         set_buffer_length input (length + to_copy);
 
         let next_offset = Int64.(add offset' (of_int to_copy)) in
         T.Reader.ack t next_offset >>= fun () ->
+        Printf.fprintf stderr "acking %Ld\n%!" next_offset;
         fill ()
       end in
 
     let rec read read_ofs =
+      Printf.fprintf stderr "read read_ofs=%Ld\n%!" read_ofs;
+      Printf.fprintf stderr "fill()\n%!";
       fill () >>= fun () ->
+      Printf.fprintf stderr "fill complete\n%!";
       let read_ofs' = get_buffer_offset input in
-      if read_ofs = read_ofs' then begin
-          info "Dropping input packet because we've already read it before. This should only happen over a restart.";
+      if read_ofs' <= read_ofs then begin
+      Printf.fprintf stderr "dropping packet read_ofs = %Ld read_ofs' = %Ld\n%!" read_ofs read_ofs';
+          (* This packet was seen before and we persisted a response. *)
           set_buffer_valid input 0;
           read read_ofs
       end else begin
         let buffer = get_buffer_buffer input in
         fail_on_error (Protocol.Header.unmarshal buffer) >>= fun hdr ->
         let payload = Cstruct.sub buffer Protocol.Header.sizeof hdr.Protocol.Header.len in
+        (* return the read_ofs value a future caller would need to get the next packet *)
+        let read_ofs'' = Int64.(add read_ofs' (of_int (get_buffer_length input))) in
         match Protocol.Request.unmarshal hdr payload with
         | `Ok r ->
-          return (read_ofs', `Ok (hdr, r))
+          return (read_ofs'', `Ok (hdr, r))
         | `Error e ->
-          return (read_ofs', `Error e)
+          return (read_ofs'', `Error e)
       end in
 
     let write_m = Lwt_mutex.create () in
@@ -264,7 +282,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
            we crash here we may send the response packet twice. Note that all
            responses have request ids so should be safely ignored by the client. *)
         ( match r.response with
-          | None -> return r.write_ofs (* always 0L *)
+          | None -> return r.write_ofs
           | Some response -> write r.write_ofs response
         ) >>= fun write_ofs ->
         Lwt_mutex.unlock write_m;
@@ -285,6 +303,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
             if r.write_ofs <> r2.write_ofs
             then return None
             else begin
+            Printf.fprintf stderr "generating response\n%!";
               (* This will 'commit' updates to the in-memory store: *)
               Call.reply store (Some limits) perm c hdr request >>= fun (response, side_effects) ->
               return (Some { response = Some response; side_effects; write_ofs; read_ofs })

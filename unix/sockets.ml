@@ -28,22 +28,93 @@ type 'a t = 'a Lwt.t
 let return x = return x
 let ( >>= ) m f = m >>= f
 
+module Input = struct
+  type t = {
+    fd: Lwt_unix.file_descr;
+    full_buffer: Cstruct.t; (* the maximum amount of space used for buffering *)
+    mutable available: Cstruct.t; (* remaining un-acknowledged data *)
+    mutable seq: int64; (* seq of last acked byte *)
+  }
+
+  let make fd size =
+    let full_buffer = Cstruct.create size in
+    let available = Cstruct.sub full_buffer 0 0 in
+    let seq = -1L in
+    { fd; full_buffer; available; seq }
+
+  let next t =
+    if Cstruct.len t.available > 0
+    then return (t.seq, t.available)
+    else begin
+      Lwt_bytes.read t.fd t.full_buffer.Cstruct.buffer t.full_buffer.Cstruct.off t.full_buffer.Cstruct.len >>= fun n ->
+      Printf.fprintf stderr "XXX just read %d\n%!" n;
+      t.available <- Cstruct.sub t.full_buffer 0 n;
+      if n = 0
+      then fail End_of_file
+      else return (t.seq, t.available)
+    end
+
+  let ack t seq =
+    let bytes_consumed = Int64.(to_int (sub seq t.seq)) in
+    t.available <- Cstruct.shift t.available bytes_consumed;
+    t.seq <- seq;
+    return ()
+end
+
+let complete op fd buf =
+  let ofs = buf.Cstruct.off in
+  let len = buf.Cstruct.len in
+  let buf = buf.Cstruct.buffer in
+  let rec loop acc fd buf ofs len =
+    op fd buf ofs len >>= fun n ->
+    let len' = len - n in
+    let acc' = acc + n in
+    if len' = 0 || n = 0
+    then return acc'
+    else loop acc' fd buf (ofs + n) len' in
+  loop 0 fd buf ofs len >>= fun n ->
+  if n = 0 && len <> 0
+  then fail End_of_file
+  else return ()
+
+module Output = struct
+  type t = {
+    fd: Lwt_unix.file_descr;
+    full_buffer: Cstruct.t;
+    mutable available: Cstruct.t;
+    mutable seq: int64;
+  }
+
+  let make fd size =
+    let full_buffer = Cstruct.create size in
+    let available = full_buffer in
+    let seq = -1L in
+    { fd; full_buffer; available; seq }
+
+  let next t =
+    if Cstruct.len t.available = 0 then t.available <- t.full_buffer;
+    return (t.seq, t.available)
+
+  let ack t seq =
+    let bytes_to_send = Int64.(to_int (sub seq t.seq)) in
+    complete Lwt_bytes.write t.fd (Cstruct.sub t.available 0 bytes_to_send) >>= fun () ->
+    t.available <- Cstruct.shift t.available bytes_to_send;
+    t.seq <- seq;
+    return ()
+end
+
 (* Individual connections *)
-type channel = {
+type connection = {
   fd: Lwt_unix.file_descr;
   sockaddr: Lwt_unix.sockaddr;
-  in_buffer: Cstruct.t;
-  mutable in_seq: int64;
-  out_buffer: Cstruct.t;
-  mutable out_seq: int64;
+  input: Input.t;
+  output: Output.t;
 }
 
 let alloc (fd, sockaddr) =
-  let in_buffer = Cstruct.create 4096 in
-  let out_buffer = Cstruct.create 4096 in
-  let in_seq = 0L in
-  let out_seq = 0L in
-  return { fd; sockaddr; in_buffer; in_seq; out_buffer; out_seq }
+  let input = Input.make fd 4096 in
+  let output = Output.make fd 4096 in
+  return { fd; sockaddr; input; output }
 
 let create () =
   let sockaddr = Lwt_unix.ADDR_UNIX(!xenstored_socket) in
@@ -63,44 +134,17 @@ let create () =
 
 let destroy { fd } = Lwt_unix.close fd
 
-let complete op fd buf =
-  let ofs = buf.Cstruct.off in
-  let len = buf.Cstruct.len in
-  let buf = buf.Cstruct.buffer in
-  let rec loop acc fd buf ofs len =
-    op fd buf ofs len >>= fun n ->
-    let len' = len - n in
-    let acc' = acc + n in
-    if len' = 0 || n = 0
-    then return acc'
-    else loop acc' fd buf (ofs + n) len' in
-  loop 0 fd buf ofs len >>= fun n ->
-  if n = 0 && len <> 0
-  then fail End_of_file
-  else return ()
 
 module Reader = struct
-  type t = channel
-
-  let next t =
-    Lwt_bytes.read t.fd t.in_buffer.Cstruct.buffer t.in_buffer.Cstruct.off t.in_buffer.Cstruct.len >>= fun n ->
-    return (t.in_seq, Cstruct.sub t.in_buffer 0 n)
-
-  let ack t seq =
-    t.in_seq <- seq;
-    return ()
+  type t = connection
+  let next t = Input.next t.input
+  let ack t seq = Input.ack t.input seq
 end
 
 module Writer = struct
-  type t = channel
-
-  let next t =
-    return (t.out_seq, t.out_buffer)
-
-  let ack t seq =
-    complete Lwt_bytes.write t.fd (Cstruct.sub t.out_buffer 0 Int64.(to_int (sub seq t.out_seq))) >>= fun () ->
-    t.out_seq <- seq;
-    return ()
+  type t = connection
+  let next t = Output.next t.output
+  let ack t seq = Output.ack t.output seq
 end
 
 let read { fd } = complete Lwt_bytes.read fd

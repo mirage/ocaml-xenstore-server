@@ -50,25 +50,25 @@ module type TRANSPORT = sig
   type server
   val listen: unit -> server t
 
-  type channel
-  val create: unit -> channel t
+  type connection
+  val create: unit -> connection t
 
-  module Reader: SHARED_MEMORY_CHANNEL with type t = channel
-  module Writer: SHARED_MEMORY_CHANNEL with type t = channel
+  module Reader: SHARED_MEMORY_CHANNEL with type t = connection
+  module Writer: SHARED_MEMORY_CHANNEL with type t = connection
 
-  val read: channel -> Cstruct.t -> unit t
-  val write: channel -> Cstruct.t -> unit t
-  val destroy: channel -> unit t
+  val read: connection -> Cstruct.t -> unit t
+  val write: connection -> Cstruct.t -> unit t
+  val destroy: connection -> unit t
 
-  val address_of: channel -> Uri.t t
-  val domain_of: channel -> int
+  val address_of: connection -> Uri.t t
+  val domain_of: connection -> int
 
-  val accept_forever: server -> (channel -> unit t) -> 'a t
+  val accept_forever: server -> (connection -> unit t) -> 'a t
 
   module Introspect : sig
-    val ls: channel -> string list -> string list
-    val read: channel -> string list -> string option
-    val write: channel -> string list -> string -> bool
+    val ls: connection -> string list -> string list
+    val read: connection -> string list -> string option
+    val write: connection -> string list -> string -> bool
   end
 end
 

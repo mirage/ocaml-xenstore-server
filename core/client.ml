@@ -88,7 +88,7 @@ module Make = functor(IO: S.TRANSPORT) -> struct
 
   (* Represents a single acive connection to a server *)
   type client = {
-    mutable transport: IO.channel;
+    mutable transport: IO.connection;
     rid_to_wakeup: (int32, Response.t Lwt.u) Hashtbl.t;
     mutable dispatcher_thread: unit Lwt.t;
     mutable dispatcher_shutting_down: bool;
@@ -138,13 +138,13 @@ module Make = functor(IO: S.TRANSPORT) -> struct
         dispatcher t
     | r ->
         let rid = hdr.Header.rid in
-        lwt thread = Lwt_mutex.with_lock t.suspended_m (fun () -> 
+        lwt thread = Lwt_mutex.with_lock t.suspended_m (fun () ->
           if Hashtbl.mem t.rid_to_wakeup rid
           then return (Some (Hashtbl.find t.rid_to_wakeup rid))
           else return None) in
         match thread with
           | None -> handle_exn t (Unexpected_rid rid)
-          | Some thread -> 
+          | Some thread ->
             begin
               Lwt.wakeup_later thread r;
               dispatcher t
@@ -180,7 +180,7 @@ module Make = functor(IO: S.TRANSPORT) -> struct
 
   let suspend t =
     lwt () = Lwt_mutex.with_lock t.suspended_m
-      (fun () -> 
+      (fun () ->
         t.suspended <- true;
         while_lwt (Hashtbl.length t.rid_to_wakeup > 0) do
           Lwt_condition.wait ~mutex:t.suspended_m t.suspended_c
@@ -190,10 +190,10 @@ module Make = functor(IO: S.TRANSPORT) -> struct
       return ()
 
   let resume_unsafe t =
-    lwt () = Lwt_mutex.with_lock t.suspended_m (fun () -> 
+    lwt () = Lwt_mutex.with_lock t.suspended_m (fun () ->
       t.suspended <- false;
       t.dispatcher_shutting_down <- false;
-      Lwt_condition.broadcast t.suspended_c (); 
+      Lwt_condition.broadcast t.suspended_c ();
       return ()) in
     t.dispatcher_thread <- dispatcher t;
     return ()
@@ -238,10 +238,10 @@ module Make = functor(IO: S.TRANSPORT) -> struct
         IO.write c.transport payload >>= fun () ->
         return ()) in
       lwt res = t in
-      lwt () = Lwt_mutex.with_lock c.suspended_m 
-        (fun () -> 
+      lwt () = Lwt_mutex.with_lock c.suspended_m
+        (fun () ->
           Hashtbl.remove c.rid_to_wakeup rid;
-          Lwt_condition.broadcast c.suspended_c (); 
+          Lwt_condition.broadcast c.suspended_c ();
           return ()) in
       f res
  end
@@ -367,4 +367,3 @@ module Make = functor(IO: S.TRANSPORT) -> struct
     with Eagain ->
       transaction client f
 end
-
