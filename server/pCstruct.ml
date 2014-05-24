@@ -12,27 +12,39 @@
  * GNU Lesser General Public License for more details.
  *)
 
+type handle = int64
+
 type t = {
-  name: string;
+  handle: handle;
   buffer: Cstruct.t;
 }
 
-let table : (string, t) Hashtbl.t = Hashtbl.create 10
+let table : (int64, t) Hashtbl.t = Hashtbl.create 10
 
 open Lwt
 
-let create name size =
-  if Hashtbl.mem table name
-  then return (Hashtbl.find table name)
-  else begin
-    let buffer = Cstruct.create size in
-    let t = { name; buffer } in
-    Hashtbl.replace table name t;
-    return t
-  end
+let fresh_handle =
+  let next = ref 0L in
+  fun () ->
+    let this = !next in
+    next := Int64.succ !next;
+    this
+
+let create size =
+  let handle = fresh_handle () in
+  let buffer = Cstruct.create size in
+  let t = { handle; buffer } in
+  Hashtbl.replace table handle t;
+  return t
 
 let destroy t =
-  Hashtbl.remove table t.name;
+  Hashtbl.remove table t.handle;
   return ()
 
-let to_cstruct t = t.buffer
+let cstruct t = t.buffer
+let handle t = t.handle
+
+let lookup handle =
+  if Hashtbl.mem table handle
+  then return (Some (Hashtbl.find table handle))
+  else return None

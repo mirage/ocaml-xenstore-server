@@ -15,13 +15,24 @@
 type t
 (** A persistent buffer *)
 
-val create: string -> int -> t Lwt.t
-(** [create name size]: returns the persistent buffer of length [size]
-    associated with [name], creating it if it doesn't alraedy exist.
+val create: int -> t Lwt.t
+(** [create name size]: creates a fresh persistent buffer of length [size].
     The buffer is guaranteed to persist across restarts. *)
 
 val destroy: t -> unit Lwt.t
 (** [destroy t]: permanently deallocates the persistent buffer [t] *)
 
-val to_cstruct: t -> Cstruct.t
-(** [to_cstruct t] returns the Cstruct.t associated with [t] *)
+val cstruct: t -> Cstruct.t
+(** [cstruct t] returns the Cstruct.t associated with [t] *)
+
+type handle = int64
+(** A handle which can be persisted in a store, and then used to lookup the
+    persistent buffer after a restart. *)
+
+val handle: t -> handle
+(** [handle t] returns a unique handle associated with this buffer. The handle
+    can be used to retrieve the same buffer in future. *)
+
+val lookup: handle -> t option Lwt.t
+(** [lookup handle] returns [Some t] if [handle] refers to an existing [t]
+    or [None] if [handle] cannot be found. *)
