@@ -36,8 +36,6 @@ type response = {
   write_ofs: int64;                       (* in the future I will write this byte *)
 } with sexp
 
-let no_response = { response = None; side_effects = Transaction.no_side_effects (); read_ofs = -2L; write_ofs = -1L }
-
 module Make = functor(T: S.TRANSPORT) -> struct
 
   include T
@@ -90,7 +88,17 @@ module Make = functor(T: S.TRANSPORT) -> struct
 
     (* XXX: write the input, output handles to the store *)
 
-    PResponse.create (special_path "response") no_response >>= fun presponse ->
+    (* Initialise the persistent 'current response' *)
+    T.Reader.next t >>= fun (next_read_ofs, _) ->
+    T.Writer.next t >>= fun (previous_write_ofs, _) ->
+    let initial_state = {
+      response = None; (* nothing to return *)
+      side_effects = Transaction.no_side_effects(); (* no side effects to execute *)
+      read_ofs = Int64.pred next_read_ofs; (* the last acknowledged read offset *)
+      write_ofs = previous_write_ofs;
+    } in
+
+    PResponse.create (special_path "response") initial_state >>= fun presponse ->
 
     (* Flush any pending output to the channel. This function can suffer a crash and
        restart at any point. On exit, the output buffer is invalid and the whole

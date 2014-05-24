@@ -33,13 +33,13 @@ module Input = struct
     fd: Lwt_unix.file_descr;
     full_buffer: Cstruct.t; (* the maximum amount of space used for buffering *)
     mutable available: Cstruct.t; (* remaining un-acknowledged data *)
-    mutable seq: int64; (* seq of last acked byte *)
+    mutable seq: int64; (* seq of next, un-acknowledged byte. See  *)
   }
 
   let make fd size =
     let full_buffer = Cstruct.create size in
     let available = Cstruct.sub full_buffer 0 0 in
-    let seq = -1L in
+    let seq = 0L in
     { fd; full_buffer; available; seq }
 
   let next t =
@@ -82,13 +82,13 @@ module Output = struct
     fd: Lwt_unix.file_descr;
     full_buffer: Cstruct.t;
     mutable available: Cstruct.t;
-    mutable seq: int64;
+    mutable seq: int64; (* seq of next byte to write *)
   }
 
   let make fd size =
     let full_buffer = Cstruct.create size in
     let available = full_buffer in
-    let seq = -1L in
+    let seq = 0L in
     { fd; full_buffer; available; seq }
 
   let next t =
