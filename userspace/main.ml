@@ -25,17 +25,30 @@ module DomainServer = Server.Make(Interdomain)
 
 let syslog = Lwt_log.syslog ~facility:`Daemon ()
 
+let shutting_down_logger = ref false
+let shutdown_logger () =
+  shutting_down_logger := true;
+  info "Shutting down the logger"
+
 let rec logging_thread daemon logger =
-  lwt lines = Logging.get logger in
-  lwt () = Lwt_list.iter_s
-    (fun x ->
-      lwt () =
-        if daemon
-        then Lwt_log.log ~logger:syslog ~level:Lwt_log.Notice x
-        else Lwt_io.write_line Lwt_io.stdout x in
-        return ()
-    ) lines in
-  logging_thread daemon logger
+  let log_batch () =
+    lwt lines = Logging.get logger in
+    Lwt_list.iter_s
+      (fun x ->
+        lwt () =
+          if daemon
+          then Lwt_log.log ~logger:syslog ~level:Lwt_log.Notice x
+          else Lwt_io.write_line Lwt_io.stdout x in
+          return ()
+      ) lines in
+  log_batch () >>= fun () ->
+  if not(!shutting_down_logger)
+  then logging_thread daemon logger
+  else begin
+    (* Grab the last few lines after the shutdown was triggered *)
+    log_batch () >>= fun () ->
+    Lwt_io.flush_all ()
+  end
 
 let default_pidfile = "/var/run/xenstored.pid"
 
@@ -71,10 +84,8 @@ let ensure_directory_exists dir_needed =
       fail (Failure "directory does not exist")
     end else return ()
 
-let program_thread daemon path pidfile enable_xen enable_unix irmin_path =
+let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
 
-  info "User-space xenstored version %s starting" Version.version;
-  let (_: 'a) = logging_thread daemon Logging.logger in
 
   let persistence = match irmin_path with
   | None ->
@@ -127,6 +138,9 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path =
         error "The unix domain socket %s is already in use (EADDRINUSE)" !Sockets.xenstored_socket;
         error "To resolve this program either run this program with more privileges (so that it may delete the current socket) or change the path.";
         fail e
+      | e ->
+        error "Failed to start the unix domain socket server: %s" (Printexc.to_string e);
+        fail e
     end else return () in
   let (b: unit Lwt.t) =
     if enable_xen then begin
@@ -140,11 +154,18 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path =
   debug "No running transports, shutting down.";
   return ()
 
+let with_logging daemon program_thread =
+  info "User-space xenstored version %s starting" Version.version;
+  let l_t = logging_thread daemon Logging.logger in
+  Lwt.catch program_thread (fun _ -> return ()) >>= fun () ->
+  shutdown_logger ();
+  l_t
+
 let program pidfile daemon path enable_xen enable_unix irmin_path=
   Sockets.xenstored_socket := path;
   if daemon then Lwt_daemon.daemonize ();
   try
-    Lwt_main.run (program_thread daemon path pidfile enable_xen enable_unix irmin_path)
+    Lwt_main.run (with_logging daemon (program_thread daemon path pidfile enable_xen enable_unix irmin_path))
   with e ->
     exit 1
 
@@ -169,4 +190,3 @@ let info =
 let () = match Term.eval (program_t, info) with
   | `Ok () -> exit 0
   | _ -> exit 1
-
