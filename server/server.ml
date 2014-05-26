@@ -30,10 +30,9 @@ let fail_on_error = function
 
 (* A complete response to some action: *)
 type response = {
-  response: Protocol.Response.t option;   (* a packet to write to the channel *)
+  (* response: Protocol.Response.t option;   (* a packet to write to the channel *) *)
   side_effects: Transaction.side_effects; (* a set of idempotent side-effects to effect *)
   read_ofs: int64;                        (* in the past I read this byte *)
-  write_ofs: int64;                       (* in the future I will write this byte *)
 } with sexp
 
 module Make = functor(T: S.TRANSPORT) -> struct
@@ -90,12 +89,9 @@ module Make = functor(T: S.TRANSPORT) -> struct
 
     (* Initialise the persistent 'current response' *)
     T.Reader.next t >>= fun (next_read_ofs, _) ->
-    T.Writer.next t >>= fun (previous_write_ofs, _) ->
     let initial_state = {
-      response = None; (* nothing to return *)
       side_effects = Transaction.no_side_effects(); (* no side effects to execute *)
       read_ofs = Int64.pred next_read_ofs; (* the last acknowledged read offset *)
-      write_ofs = previous_write_ofs;
     } in
 
     PResponse.create (special_path "response") initial_state >>= fun presponse ->
@@ -137,7 +133,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
       end in
 
     (* Enqueue an output packet. This assumes that the output buffer is empty. *)
-    let marshal write_ofs response =
+    let enqueue (* write_ofs *) response =
       if get_buffer_valid output = 1
       then fail (Failure "We cannot marshal a response to the output buffer because it is already full")
       else begin
@@ -150,17 +146,23 @@ module Make = functor(T: S.TRANSPORT) -> struct
         let hdr = { Header.tid = 0l; rid = 0l; ty = Protocol.Response.get_ty response; len = length} in
         ignore (Protocol.Header.marshal hdr reply_buf);
         T.Writer.next t >>= fun (offset, _) ->
+        (*
         if offset <> write_ofs then begin
           Printf.fprintf stderr "marshal dropping data offset=%Ld write_ofs=%Ld" offset write_ofs;
           info "Dropping packet because output stream has advanced. This should only happen over a restart."
         end else begin
+        *)
           set_buffer_offset output offset;
           set_buffer_length output (length + Protocol.Header.sizeof);
           set_buffer_valid  output 1;
+          (*
         end;
-        return Int64.(add offset (of_int length))
+        return Int64.(add offset (of_int (length + Protocol.Header.sizeof)))
+        *)
+        return ()
       end in
 
+(*
     (* [write response] marshals [response] in the output stream. *)
     let write write_ofs =
       Printf.fprintf stderr "write write_ofs=%Ld\n%!" write_ofs;
@@ -181,7 +183,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
             Printf.fprintf stderr "write returning %Ld\n%!" write_ofs;
             return write_ofs
           ) in
-
+*)
     (* [fill ()] fills up input with the next request. This function can crash and
        be restarted at any point. On exit, a whole packet is available for unmarshalling
        and the next packet is still on the ring. *)
@@ -253,9 +255,9 @@ module Make = functor(T: S.TRANSPORT) -> struct
         let read_ofs'' = Int64.(add read_ofs' (of_int (get_buffer_length input))) in
         match Protocol.Request.unmarshal hdr payload with
         | `Ok r ->
-          return (read_ofs'', `Ok (hdr, r))
+          return (read_ofs', `Ok (hdr, r))
         | `Error e ->
-          return (read_ofs'', `Error e)
+          return (read_ofs, `Error e)
       end in
 
     let write_m = Lwt_mutex.create () in
@@ -266,9 +268,13 @@ module Make = functor(T: S.TRANSPORT) -> struct
         Connection.pop_watch_events c >>= fun w ->
         (* XXX: it's possible to lose watch events if we crash here *)
         Lwt_mutex.lock write_m >>= fun () ->
-        PResponse.get presponse >>= fun r ->
-        w |> List.map (fun (p, t) -> Protocol.Response.Watchevent(p, t)) |> Lwt_list.fold_left_s write r.write_ofs >>= fun write_ofs ->
-        PResponse.set {r with write_ofs } presponse >>= fun () ->
+        flush () >>= fun () ->
+        Lwt_list.iter_s
+          (fun (p, t) ->
+            enqueue (Protocol.Response.Watchevent(p, t)) >>= fun () ->
+            (* XXX: now safe to remove event from the queue *)
+            flush ()
+          ) w >>= fun () ->
         Lwt_mutex.unlock write_m;
         return ()
 			done in
@@ -286,13 +292,10 @@ module Make = functor(T: S.TRANSPORT) -> struct
         Transaction.get_watches r.side_effects |> Lwt_list.iter_s (Connection.fire (Some limits))    >>= fun () ->
         Lwt_list.iter_s Introduce.introduce (Transaction.get_domains r.side_effects) >>= fun () ->
         Database.persist r.side_effects >>= fun () ->
-        (* If there is a response to write then write it. In the event that
-           we crash here we may send the response packet twice. Note that all
-           responses have request ids so should be safely ignored by the client. *)
-        ( match r.response with
-          | None -> return r.write_ofs
-          | Some response -> write r.write_ofs response
-        ) >>= fun write_ofs ->
+        (* If there is a response to write then write it. We must not send the
+           same reply twice because the client may re-use the request id (a small
+           integer) *)
+        flush () >>= fun () ->
         Lwt_mutex.unlock write_m;
 
         (* Read the next request, parse, and compute the response actions.
@@ -306,32 +309,17 @@ module Make = functor(T: S.TRANSPORT) -> struct
             Connection.PPerms.get (Connection.perm c) >>= fun perm ->
 
             Lwt_mutex.lock write_m >>= fun () ->
-            (* Check to see if the watch event thread has enqueued a response *)
-            PResponse.get presponse >>= fun r2 ->
-            if r.write_ofs <> r2.write_ofs
-            then return None
-            else begin
-            Printf.fprintf stderr "generating response\n%!";
-              (* This will 'commit' updates to the in-memory store: *)
-              Call.reply store (Some limits) perm c hdr request >>= fun (response, side_effects) ->
-              return (Some { response = Some response; side_effects; write_ofs; read_ofs })
-            end
+            (* This will 'commit' updates to the in-memory store: *)
+            Call.reply store (Some limits) perm c hdr request >>= fun (response, side_effects) ->
+            return (response, { side_effects; read_ofs })
           | read_ofs, `Error msg ->
 					  (* quirk: if this is a NULL-termination error then it should be EINVAL *)
             let response = Protocol.Response.Error "EINVAL" in
             let side_effects = Transaction.no_side_effects () in
 
             Lwt_mutex.lock write_m >>= fun () ->
-            (* Check to see if the watch event thread has enqueued a response *)
-            PResponse.get presponse >>= fun r2 ->
-            if r.write_ofs <> r2.write_ofs
-            then return None
-            else return (Some { response = Some response; side_effects; write_ofs; read_ofs })
-        ) >>= function
-        | None ->
-          (* The background event thread has emitted some packets *)
-          loop ()
-        | Some response ->
+            return (response, { (* response = Some response; *) side_effects; read_ofs })
+        ) >>= fun (response, effects) ->
 
           (* If we crash here then future iterations of the loop will read
              the same request packet. However since every connection is processed
@@ -339,7 +327,9 @@ module Make = functor(T: S.TRANSPORT) -> struct
              Therefore the choice of which transaction to commit may be made
              differently each time, however the client should be unaware of this. *)
 
-          PResponse.set response presponse >>= fun () ->
+          enqueue response >>= fun () ->
+
+          PResponse.set effects presponse >>= fun () ->
           (* Record the full set of response actions. They'll be executed
              (possibly multiple times) on future loop iterations. *)
 
