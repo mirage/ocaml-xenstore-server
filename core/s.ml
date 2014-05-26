@@ -44,6 +44,33 @@ module type SHARED_MEMORY_CHANNEL = sig
       been processed. *)
 end
 
+module type PERSISTENT_BUFFER = sig
+  type t
+  (** A persistent buffer *)
+
+  val create: int -> t Lwt.t
+  (** [create name size]: creates a fresh persistent buffer of length [size].
+      The buffer is guaranteed to persist across restarts. *)
+
+  val destroy: t -> unit Lwt.t
+  (** [destroy t]: permanently deallocates the persistent buffer [t] *)
+
+  val get_cstruct: t -> Cstruct.t
+  (** [get_cstruct t] returns the Cstruct.t associated with [t] *)
+
+  type handle = int64
+  (** A handle which can be persisted in a store, and then used to lookup the
+      persistent buffer after a restart. *)
+
+  val handle: t -> handle
+  (** [handle t] returns a unique handle associated with this buffer. The handle
+      can be used to retrieve the same buffer in future. *)
+
+  val lookup: handle -> t option Lwt.t
+  (** [lookup handle] returns [Some t] if [handle] refers to an existing [t]
+      or [None] if [handle] cannot be found. *)
+end
+
 module type TRANSPORT = sig
   include IO
 
@@ -55,6 +82,7 @@ module type TRANSPORT = sig
 
   module Reader: SHARED_MEMORY_CHANNEL with type t = connection
   module Writer: SHARED_MEMORY_CHANNEL with type t = connection
+  module PBuffer: PERSISTENT_BUFFER
 
   val read: connection -> Cstruct.t -> unit t
   val write: connection -> Cstruct.t -> unit t

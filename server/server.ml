@@ -89,13 +89,13 @@ module Make = functor(T: S.TRANSPORT) -> struct
 
     PEffects.create (special_path "effects") initial_state >>= fun peffects ->
 
-    PCstruct.create sizeof_buffer >>= fun poutput ->
-    let output = PCstruct.get_cstruct poutput in
+    PBuffer.create sizeof_buffer >>= fun poutput ->
+    let output = PBuffer.get_cstruct poutput in
     set_buffer_offset output 0L;
     set_buffer_length output 0;
     (* This output buffer is safe to flush *)
-    PCstruct.create sizeof_buffer >>= fun pinput ->
-    let input = PCstruct.get_cstruct pinput in
+    PBuffer.create sizeof_buffer >>= fun pinput ->
+    let input = PBuffer.get_cstruct pinput in
     set_buffer_offset input 0L;
     set_buffer_length input 0;
 

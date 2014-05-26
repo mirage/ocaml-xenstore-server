@@ -147,6 +147,45 @@ module Writer = struct
   let ack t seq = Output.ack t.output seq
 end
 
+module PBuffer = struct
+  type handle = int64
+
+  type t = {
+    handle: handle;
+    buffer: Cstruct.t;
+  }
+
+  let table : (int64, t) Hashtbl.t = Hashtbl.create 10
+
+  open Lwt
+
+  let fresh_handle =
+    let next = ref 0L in
+    fun () ->
+      let this = !next in
+      next := Int64.succ !next;
+      this
+
+  let create size =
+    let handle = fresh_handle () in
+    let buffer = Cstruct.create size in
+    let t = { handle; buffer } in
+    Hashtbl.replace table handle t;
+    return t
+
+  let destroy t =
+    Hashtbl.remove table t.handle;
+    return ()
+
+  let get_cstruct t = t.buffer
+  let handle t = t.handle
+
+  let lookup handle =
+    if Hashtbl.mem table handle
+    then return (Some (Hashtbl.find table handle))
+    else return None
+end
+
 let read { fd } = complete Lwt_bytes.read fd
 let write { fd } = complete Lwt_bytes.write fd
 
