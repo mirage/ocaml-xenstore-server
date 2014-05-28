@@ -76,13 +76,13 @@ let initialise = function
         | Store.Write(path, contents) ->
           Printf.fprintf stderr "+ %s\n%!" (Protocol.Path.to_string path);
           (try_lwt
-            DB.update db (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents))
+            DB.View.update v (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents))
           with e -> (Printf.fprintf stderr "ERR %s\n%!" (Printexc.to_string e)); return ())
         | Store.Rm path ->
           Printf.fprintf stderr "- %s\n%!" (Protocol.Path.to_string path);
           (try_lwt
-            DB.remove db (dir_of_filename path) >>= fun () ->
-            DB.remove db (value_of_filename path)
+            DB.View.remove v (dir_of_filename path) >>= fun () ->
+            DB.View.remove v (value_of_filename path)
           with e -> (Printf.fprintf stderr "ERR %s\n%!" (Printexc.to_string e)); return ())
       ) us >>= fun () ->
     DB.View.merge_path db [] v >>= function
