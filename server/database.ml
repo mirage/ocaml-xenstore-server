@@ -39,8 +39,14 @@ let initialise = function
   Lwt.wakeup store_wakener s;
   return ()
 | S.Git filename ->
-  let module Git = IrminGit.Make(IrminKey.SHA1)(IrminContents.String)(IrminReference.String) in
-  let module DB = (val Git.create ~bare:true ~kind:`Disk ~root:filename ()) in
+  let module Config = struct
+    let root = Some filename
+    module Store = Git_fs
+    let bare = true
+    let disk = true
+  end in
+  let module Git = IrminGit.Make(Config) in
+  let module DB = Git.Make(IrminKey.SHA1)(IrminContents.String)(IrminTag.String) in
   DB.create () >>= fun db ->
 
   let dir_suffix = ".dir" in
