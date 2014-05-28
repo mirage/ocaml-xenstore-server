@@ -63,7 +63,8 @@ let incr_nb_ops t = t.stat_nb_ops <- t.stat_nb_ops + 1
 
 let pop_watch_events_nowait_nolock t =
   Watch_events.fold (fun acc x -> x :: acc) [] (watch_events t) >>= fun q ->
-  Watch_events.clear (watch_events t) >>= fun () ->
+  Watch_events.clear (watch_events t) >>= fun effects ->
+  Database.persist effects >>= fun () ->
   return (List.rev q)
 
 let pop_watch_events t =
@@ -90,7 +91,7 @@ let by_index   : (int,   t) Hashtbl.t = Hashtbl.create 128
 
 let watches : (string, w list) Trie.t ref = ref (Trie.create ())
 
-let w_create ~con ~name ~token = { 
+let w_create ~con ~name ~token = {
   con = con;
   watch = name, token;
   count = 0;
@@ -161,7 +162,7 @@ let watch con limits (name, token) =
 
   let watch = w_create ~con ~token ~name in
   fire_one limits None watch >>= fun () ->
-  
+
   Hashtbl.replace con.ws name (watch :: l);
   con.nb_watches <- con.nb_watches + 1;
 
@@ -254,10 +255,11 @@ let destroy address =
       ) !watches;
     Hashtbl.remove by_address address;
     Hashtbl.remove by_index c.idx;
-    Watch_events.clear c.watch_events >>= fun () ->
-    Watch_registrations.clear c.watch_registrations >>= fun () ->
-    PInt32.destroy c.next_tid >>= fun () ->
-    PPerms.destroy c.perm
+    Watch_events.clear c.watch_events >>= fun effects1 ->
+    Watch_registrations.clear c.watch_registrations >>= fun effects2 ->
+    PInt32.destroy c.next_tid >>= fun effects3 ->
+    PPerms.destroy c.perm  >>= fun effects4 ->
+    Database.persist (Transaction.(effects1 ++ effects2 ++ effects3 ++ effects4))
   end
 
 let create (address, domid) =

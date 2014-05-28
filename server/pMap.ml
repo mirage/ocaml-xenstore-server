@@ -84,8 +84,7 @@ module Make(K: S.STRINGABLE)(T: S.SEXPABLE) = struct
     let path = Protocol.Path.of_string_list t.name in
     if Transaction.exists tr (Perms.of_domain 0) path then Transaction.rm tr (Perms.of_domain 0) path;
     Transaction.mkdir tr None 0 (Perms.of_domain 0) path;
-    Database.persist (Transaction.get_side_effects tr) >>= fun () ->
-    return ()
+    return (Transaction.get_side_effects tr)
 
   let fold f initial t =
     recreate t >>= fun () ->

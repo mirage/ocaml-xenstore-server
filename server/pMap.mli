@@ -42,7 +42,7 @@ module Make(K: S.STRINGABLE)(V: S.SEXPABLE) : sig
   val mem: K.t -> t -> bool Lwt.t
   (** [mem k t]: true if [k] is bound in [t], false otherwise *)
 
-  val clear: t -> unit Lwt.t
+  val clear: t -> Transaction.side_effects Lwt.t
   (** [clear t]: deletes all bindings from map [t] *)
 
   val fold: ('b -> K.t -> V.t -> 'b) -> 'b -> t -> 'b Lwt.t

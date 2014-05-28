@@ -304,7 +304,8 @@ module Make = functor(T: S.TRANSPORT) -> struct
 			Lwt.cancel background_watch_event_flusher;
 			Connection.destroy address >>= fun () ->
       Mount.unmount connection_path >>= fun () ->
-      PEffects.destroy peffects >>= fun () ->
+      PEffects.destroy peffects >>= fun effects ->
+      Database.persist effects >>= fun () ->
       Quota.remove dom >>= fun () ->
       T.destroy t
 

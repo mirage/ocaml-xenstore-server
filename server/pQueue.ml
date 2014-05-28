@@ -30,7 +30,7 @@ module type S = sig
       When the thread completes the element will be in the persistent
       store and will survive a crash. *)
 
-  val clear: t -> unit Lwt.t
+  val clear: t -> Transaction.side_effects Lwt.t
   (** [clear t]: deletes all elements in queue [t] *)
 
   val fold: ('b -> v -> 'b) -> 'b -> t -> 'b Lwt.t

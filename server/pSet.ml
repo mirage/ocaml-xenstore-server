@@ -41,7 +41,7 @@ module type S = sig
   val mem: v-> t -> bool Lwt.t
   (** [mem v t]: true if [v] is in [t], false otherwise *)
 
-  val clear: t -> unit Lwt.t
+  val clear: t -> Transaction.side_effects Lwt.t
   (** [clear t]: deletes all bindings from map [t] *)
 
   val fold: ('b -> v -> 'b) -> 'b -> t -> 'b Lwt.t
@@ -136,8 +136,7 @@ module Make(T: S.SEXPABLE) = struct
         let path = Protocol.Path.of_string_list t.name in
         if Transaction.exists tr (Perms.of_domain 0) path then Transaction.rm tr (Perms.of_domain 0) path;
         Transaction.mkdir tr None 0 (Perms.of_domain 0) path;
-        Database.persist (Transaction.get_side_effects tr) >>= fun () ->
-        return ()
+        return (Transaction.get_side_effects tr)
       )
 
   let fold f i t = Lwt_mutex.with_lock t.m (fun () -> fold (fun acc _ v -> f acc v) i t)

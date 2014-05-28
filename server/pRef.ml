@@ -24,7 +24,7 @@ module type S = sig
       If the cell doesn't already exist, one is created with value
       [default] *)
 
-  val destroy: t -> unit Lwt.t
+  val destroy: t -> Transaction.side_effects Lwt.t
   (** [destroy t]: removes the persistent cell *)
 
   val name: t -> string list
@@ -81,7 +81,7 @@ module Make(V: S.SEXPABLE) = struct
     let path = Protocol.Path.of_string_list t.name in
     let perms = Perms.of_domain 0 in
     Transaction.rm tr perms path;
-    Database.persist (Transaction.get_side_effects tr)
+    return (Transaction.get_side_effects tr)
 
   let name t = t.name
 

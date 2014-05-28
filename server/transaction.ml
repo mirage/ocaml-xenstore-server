@@ -47,6 +47,8 @@ let merge a b = {
   unwatch = a.unwatch @ b.unwatch;
 }
 
+let ( ++ ) a b = merge a b
+
 let get_watches side_effects = List.rev side_effects.watches
 let get_updates side_effects = List.rev side_effects.updates
 let get_domains side_effects = List.rev side_effects.domains
