@@ -26,25 +26,27 @@ end)(struct type t = int with sexp end)
 
 let prefix = [ "tool"; "xenstored"; "quota" ]
 
+
 (* Global default quotas: *)
-let maxent         = PRef.Int.create (prefix @ [ "default"; "number-of-entries" ]) 10000
-let maxsize        = PRef.Int.create (prefix @ [ "default"; "entry-length" ]) 4096
-let maxwatch       = PRef.Int.create (prefix @ [ "default"; "number-of-registered-watches" ]) 50
-let maxtransaction = PRef.Int.create (prefix @ [ "default"; "number-of-active-transactions" ]) 20
-let maxwatchevent  = PRef.Int.create (prefix @ [ "default"; "number-of-queued-watch-events" ]) 256
+let maxent         = Database.immediate (PRef.Int.create (prefix @ [ "default"; "number-of-entries" ]) 10000)
+let maxsize        = Database.immediate (PRef.Int.create (prefix @ [ "default"; "entry-length" ]) 4096)
+let maxwatch       = Database.immediate (PRef.Int.create (prefix @ [ "default"; "number-of-registered-watches" ]) 50)
+let maxtransaction = Database.immediate (PRef.Int.create (prefix @ [ "default"; "number-of-active-transactions" ]) 20)
+let maxwatchevent  = Database.immediate (PRef.Int.create (prefix @ [ "default"; "number-of-queued-watch-events" ]) 256)
 
 (* Per-domain quota overrides: *)
-let maxent_overrides         = PerDomain.create (prefix @ [ "number-of-entries" ])
-let maxwatch_overrides       = PerDomain.create (prefix @ [ "number-of-registered-watches" ])
-let maxtransaction_overrides = PerDomain.create (prefix @ [ "number-of-active-transactions" ])
+let maxent_overrides         = Database.immediate (PerDomain.create (prefix @ [ "number-of-entries" ]))
+let maxwatch_overrides       = Database.immediate (PerDomain.create (prefix @ [ "number-of-registered-watches" ]))
+let maxtransaction_overrides = Database.immediate (PerDomain.create (prefix @ [ "number-of-active-transactions" ]))
 
 let remove domid =
   maxent_overrides >>= fun maxent_overrides ->
   maxwatch_overrides >>= fun maxwatch_overrides ->
   maxtransaction_overrides >>= fun maxtransaction_overrides ->
-  PerDomain.remove domid maxent_overrides >>= fun () ->
-  PerDomain.remove domid maxwatch_overrides >>= fun () ->
-  PerDomain.remove domid maxtransaction_overrides
+  PerDomain.remove domid maxent_overrides >>= fun effects1 ->
+  PerDomain.remove domid maxwatch_overrides >>= fun effects2 ->
+  PerDomain.remove domid maxtransaction_overrides >>= fun effects3 ->
+  return Transaction.(effects1 ++ effects2 ++ effects3)
 
 (* A snapshot of the current state for a given domid, needed to check
    for quota violations during a transaction. *)
@@ -59,7 +61,7 @@ let limits_of_domain domid =
   maxtransaction_overrides >>= fun maxtransaction_overrides ->
   PerDomain.mem domid maxent_overrides >>= fun b ->
   (if b then
-          PerDomain.find domid maxent_overrides 
+          PerDomain.find domid maxent_overrides
   else PRef.Int.get maxent) >>= fun number_of_entries ->
   PRef.Int.get maxsize >>= fun entry_length ->
   PerDomain.mem domid maxwatch_overrides >>= fun b ->

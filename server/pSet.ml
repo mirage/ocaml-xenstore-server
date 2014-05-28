@@ -19,7 +19,7 @@ module type S = sig
   type t
   (** A persistent set of values of type v *)
 
-  val create: string list -> t Lwt.t
+  val create: string list -> (t * Transaction.side_effects) Lwt.t
   (** [create name]: loads the set at [name] *)
 
   val name: t -> string list
@@ -28,12 +28,12 @@ module type S = sig
   val cardinal: t -> int Lwt.t
   (** [cardinal t]: the number of elements in the set *)
 
-  val add: v -> t -> unit Lwt.t
+  val add: v -> t -> Transaction.side_effects Lwt.t
   (** [add v t]: adds [v] to set [t].
       When the thread completes the update will be in the persistent
       store and will survive a crash. *)
 
-  val remove: v -> t -> unit Lwt.t
+  val remove: v -> t -> Transaction.side_effects Lwt.t
   (** [remove v t]: removes [v] from the set [t].
       When the thread completes the update will be in the persistent
       store and will survive a crash. *)
@@ -71,11 +71,12 @@ module Make(T: S.SEXPABLE) = struct
     let tr = Transaction.make Transaction.none db in
     let path = Protocol.Path.of_string_list t.name in
     if not(Transaction.exists tr (Perms.of_domain 0) path) then Transaction.mkdir tr None 0 (Perms.of_domain 0) path;
-    Database.persist (Transaction.get_side_effects tr)
+    return (Transaction.get_side_effects tr)
 
   (* fold over keys and values: for internal use only. *)
   let fold f initial t =
-    recreate t >>= fun () ->
+    recreate t >>= fun effects ->
+    Database.persist effects >>= fun () ->
     Database.store >>= fun db ->
     let tr = Transaction.make Transaction.none db in
     let path = Protocol.Path.of_string_list t.name in
@@ -95,8 +96,8 @@ module Make(T: S.SEXPABLE) = struct
     let t = { name; m } in
     Lwt_mutex.with_lock t.m
       (fun () ->
-        recreate t >>= fun () ->
-        return t
+        recreate t >>= fun effects ->
+        return (t, effects)
       )
 
   let name t = t.name
@@ -107,25 +108,25 @@ module Make(T: S.SEXPABLE) = struct
     Lwt_mutex.with_lock t.m
       (fun () ->
         mem v t >>= function
-        | true -> return ()
+        | true -> return (Transaction.no_side_effects ())
         | false ->
           fold (fun acc k _ -> try max acc (int_of_string k) with _ -> acc) (-1) t >>= fun max_id ->
           Database.store >>= fun db ->
           let tr = Transaction.make Transaction.none db in
           Transaction.write tr None 0 (Perms.of_domain 0) (Protocol.Path.of_string_list (t.name @ [ string_of_int (max_id + 1) ])) (Sexp.to_string (T.sexp_of_t v));
-          Database.persist (Transaction.get_side_effects tr)
+          return (Transaction.get_side_effects tr)
       )
 
   let remove v t =
     Lwt_mutex.with_lock t.m
       (fun () ->
         fold (fun acc k v' -> if v' = v then Some k else None) None t >>= function
-        | None -> return ()
+        | None -> return (Transaction.no_side_effects())
         | Some key ->
           Database.store >>= fun db ->
           let tr = Transaction.make Transaction.none db in
           Transaction.rm tr (Perms.of_domain 0) (Protocol.Path.of_string_list (t.name @ [ key ]));
-          Database.persist (Transaction.get_side_effects tr)
+          return (Transaction.get_side_effects tr)
       )
 
   let clear t =

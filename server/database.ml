@@ -29,6 +29,11 @@ let persist side_effects =
   persister >>= fun p ->
   p (List.rev side_effects.Transaction.updates)
 
+let immediate f =
+  f >>= fun (t, e) ->
+  persist e >>= fun () ->
+  return t
+
 let initialise = function
 | S.NoPersistence ->
   let s = Store.create () in

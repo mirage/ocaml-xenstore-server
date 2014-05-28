@@ -51,9 +51,15 @@ let rpc store c tid request =
                 Connection.PPerms.get (Connection.perm c) >>= fun perm ->
                 Call.reply store (Some limits) perm c hdr request >>= fun (response, side_effects) ->
                 debug "request = %s response = %s side_effects = %s" (Sexp.to_string (Protocol.Request.sexp_of_t request)) (Sexp.to_string (Protocol.Response.sexp_of_t response)) (Sexp.to_string (Transaction.sexp_of_side_effects side_effects));
-                Transaction.get_watch side_effects |> List.rev |> Lwt_list.iter_s (Connection.watch c (Some limits)) >>= fun () ->
-                Transaction.get_unwatch side_effects |> List.rev |> Lwt_list.iter_s (Connection.unwatch c) >>= fun () ->
-                Transaction.get_watches side_effects |> List.rev |> Lwt_list.iter_s (Connection.fire (Some limits)) >>= fun () ->
+                let iter_persist f xs =
+                  Lwt_list.fold_left_s (fun side_effects x ->
+                    f x >>= fun effects ->
+                    return Transaction.(side_effects ++ effects)
+                  ) Transaction.(no_side_effects ()) xs >>= fun side_effects ->
+                  Database.persist side_effects in
+                Transaction.get_watch side_effects |> List.rev |> iter_persist (Connection.watch c (Some limits)) >>= fun () ->
+                Transaction.get_unwatch side_effects |> List.rev |> iter_persist (Connection.unwatch c) >>= fun () ->
+                Transaction.get_watches side_effects |> List.rev |> iter_persist (Connection.fire (Some limits)) >>= fun () ->
                 return response
         with
         | Node.Doesnt_exist x ->
@@ -75,8 +81,9 @@ let interdomain domid = Uri.make ~scheme:"domain" ~path:(string_of_int domid) ()
 let connect domid =
         let t =
                 let open Lwt in
-                Connection.destroy (interdomain domid) >>= fun () ->
-                Connection.create (interdomain domid, domid) >>= fun conn ->
+                Connection.destroy (interdomain domid) >>= fun effects1 ->
+                Connection.create (interdomain domid, domid) >>= fun (conn, effects2) ->
+                Database.persist Transaction.(effects1 ++ effects2) >>= fun () ->
                 return conn in
         Lwt_main.run t
 

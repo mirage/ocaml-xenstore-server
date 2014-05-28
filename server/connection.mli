@@ -58,23 +58,23 @@ val pop_watch_events: t -> Watch.t list Lwt.t
 val pop_watch_events_nowait: t -> Watch.t list Lwt.t
 (** Dequeues any pending watch events without blocking *)
 
-val fire_one: Limits.t option -> Protocol.Name.t option -> w -> unit Lwt.t
+val fire_one: Limits.t option -> Protocol.Name.t option -> w -> Transaction.side_effects Lwt.t
 (** [fire_one limits name w] enqueues single watch event provided
     the watch event queue hasn't reached its limit. If the watch was
     triggered because some name changed then that name is provided. *)
 
-val watch: t -> Limits.t option -> Watch.t -> unit Lwt.t
+val watch: t -> Limits.t option -> Watch.t -> Transaction.side_effects Lwt.t
 (** [watch t limits watch] registered [watch] on connection [t] *)
 
-val unwatch: t -> Watch.t -> unit Lwt.t
+val unwatch: t -> Watch.t -> Transaction.side_effects Lwt.t
 (** [unwatch t watch] removes the registration associated with [watch].
     Raises Enoent if the watch registration does not exist. *)
 
-val fire: Limits.t option -> (Protocol.Op.t * Protocol.Name.t) -> unit Lwt.t
+val fire: Limits.t option -> (Protocol.Op.t * Protocol.Name.t) -> Transaction.side_effects Lwt.t
 (** [fire limits (op, name)] fires watches associated with [name] after
     operatino [op] *)
 
-val register_transaction: Limits.t option -> t -> Store.t -> int32 Lwt.t
+val register_transaction: Limits.t option -> t -> Store.t -> (int32 * Transaction.side_effects) Lwt.t
 (** [register_transaction limits t store] allocates and returns a fresh
     transaction id *)
 
@@ -91,10 +91,10 @@ val incr_nb_ops: t -> unit
 
 val mark_symbols: t -> unit
 
-val destroy: Uri.t -> unit Lwt.t
+val destroy: Uri.t -> Transaction.side_effects Lwt.t
 (** [destroy address] destroys any connection associated with [address] *)
 
-val create: (Uri.t * int) -> t Lwt.t
+val create: (Uri.t * int) -> (t * Transaction.side_effects) Lwt.t
 (** [create (address, domid)] creates a connection associated with [address]
     and [domid] *)
 

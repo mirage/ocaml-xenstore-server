@@ -31,17 +31,18 @@ module Make(K: S.STRINGABLE)(T: S.SEXPABLE) = struct
     let tr = Transaction.make Transaction.none db in
     let path = Protocol.Path.of_string_list t.name in
     if not(Transaction.exists tr (Perms.of_domain 0) path) then Transaction.mkdir tr None 0 (Perms.of_domain 0) path;
-    Database.persist (Transaction.get_side_effects tr)
+    return (Transaction.get_side_effects tr)
 
   let create name =
     let t = { name } in
-    recreate t >>= fun () ->
-    return t
+    recreate t >>= fun side_effects ->
+    return (t, side_effects)
 
   let name t = t.name
 
   let cardinal t =
-    recreate t >>= fun () ->
+    recreate t >>= fun effects ->
+    Database.persist effects >>= fun () ->
     Database.store >>= fun db ->
     let tr = Transaction.make Transaction.none db in
     let path = Protocol.Path.of_string_list t.name in
@@ -53,15 +54,15 @@ module Make(K: S.STRINGABLE)(T: S.SEXPABLE) = struct
     let tr = Transaction.make Transaction.none db in
     let key = K.to_string key in
     Transaction.write tr None 0 (Perms.of_domain 0) (Protocol.Path.of_string_list (t.name @ [ key ])) (Sexp.to_string (T.sexp_of_t item));
-    Database.persist (Transaction.get_side_effects tr)
+    return (Transaction.get_side_effects tr)
 
   let remove key t =
-    recreate t >>= fun () ->
+    recreate t >>= fun effects ->
     Database.store >>= fun db ->
     let tr = Transaction.make Transaction.none db in
     let key = K.to_string key in
     Transaction.rm tr (Perms.of_domain 0) (Protocol.Path.of_string_list (t.name @ [ key ]));
-    Database.persist (Transaction.get_side_effects tr)
+    return Transaction.(effects ++ (get_side_effects tr))
 
   let mem key t =
     Database.store >>= fun db ->
@@ -87,7 +88,8 @@ module Make(K: S.STRINGABLE)(T: S.SEXPABLE) = struct
     return (Transaction.get_side_effects tr)
 
   let fold f initial t =
-    recreate t >>= fun () ->
+    recreate t >>= fun effects ->
+    Database.persist effects >>= fun () ->
     Database.store >>= fun db ->
     let tr = Transaction.make Transaction.none db in
     let path = Protocol.Path.of_string_list t.name in

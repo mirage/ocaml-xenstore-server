@@ -19,13 +19,13 @@ module type S = sig
   type t
   (** A persistent queue *)
 
-  val create: string list -> t Lwt.t
+  val create: string list -> (t * Transaction.side_effects) Lwt.t
   (** [create name]: loads the queue at [name] *)
 
   val length: t -> int Lwt.t
   (** [length t]: the number of elements in queue *)
 
-  val add: v -> t -> unit Lwt.t
+  val add: v -> t -> Transaction.side_effects Lwt.t
   (** [add elem t]: adds the element [elem] to the queue [t].
       When the thread completes the element will be in the persistent
       store and will survive a crash. *)
@@ -59,12 +59,12 @@ module Make(T: S.SEXPABLE) = struct
   }
 
   let create name =
-    M.create name >>= fun root ->
+    M.create name >>= fun (root, side_effects) ->
     M.max_binding root >>= fun x ->
     let next_id = match x with
     | None -> 0L
     | Some (id, _) -> Int64.succ id in
-    return { next_id; root }
+    return ({ next_id; root }, side_effects)
 
   let length t = M.cardinal t.root
 

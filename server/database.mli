@@ -26,3 +26,7 @@ val initialise: S.persistence -> unit Lwt.t
     [persistence-policy] is [NoPersistence] then all updates are discarded.
     If [persistence-policy] is [Git path] then all updates are
     stored in a git database located at [path] *)
+
+val immediate: ('a * Transaction.side_effects) Lwt.t -> 'a Lwt.t
+(** [immediate t] persists the side effects associated with [t] immediately
+    and returns the value *)

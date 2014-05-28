@@ -12,7 +12,7 @@
  * GNU Lesser General Public License for more details.
  *)
 
-val remove: int -> unit Lwt.t
+val remove: int -> Transaction.side_effects Lwt.t
 (** [remove domid] removes all domain-specific limit overrides *)
 
 val limits_of_domain: int -> Limits.t Lwt.t

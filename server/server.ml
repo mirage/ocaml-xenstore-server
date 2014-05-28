@@ -74,7 +74,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
     lwt address = T.address_of t in
     let dom = T.domain_of t in
     let interface = introspect t in
-    Connection.create (address, dom) >>= fun c ->
+    Connection.create (address, dom) >>= fun (c, effects1) ->
     let special_path name = [ "tool"; "xenstored"; name; (match Uri.scheme address with Some x -> x | None -> "unknown"); string_of_int (Connection.index c) ] in
 
     (* If this is a restart, there will be an existing side_effects entry.
@@ -87,7 +87,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
       next_write_ofs;
     } in
 
-    PEffects.create (special_path "effects") initial_state >>= fun peffects ->
+    PEffects.create (special_path "effects") initial_state >>= fun (peffects, effects2) ->
 
     PBuffer.create sizeof_buffer >>= fun poutput ->
     let output = PBuffer.get_cstruct poutput in
@@ -100,6 +100,8 @@ module Make = functor(T: S.TRANSPORT) -> struct
     set_buffer_length input 0;
 
     (* XXX: write the input, output handles to the store *)
+
+    Database.persist Transaction.(effects1 ++ effects2) >>= fun () ->
 
     (* Flush any pending output to the channel. This function can suffer a crash and
        restart at any point. On exit, the output buffer is invalid and the whole
@@ -254,11 +256,21 @@ module Make = functor(T: S.TRANSPORT) -> struct
         (* First execute the idempotent side_effects *)
         PEffects.get peffects >>= fun r ->
         Quota.limits_of_domain dom >>= fun limits ->
-        Transaction.get_watch r.side_effects   |> Lwt_list.iter_s (Connection.watch c (Some limits)) >>= fun () ->
-        Transaction.get_unwatch r.side_effects |> Lwt_list.iter_s (Connection.unwatch c)             >>= fun () ->
-        Transaction.get_watches r.side_effects |> Lwt_list.iter_s (Connection.fire (Some limits))    >>= fun () ->
+        let side_effects = r.side_effects in
+        Lwt_list.fold_left_s (fun side_effects w ->
+          Connection.watch c (Some limits) w >>= fun effects ->
+          return Transaction.(side_effects ++ effects)
+        ) side_effects (Transaction.get_watch r.side_effects) >>= fun side_effects ->
+        Lwt_list.fold_left_s (fun side_effects w ->
+          Connection.unwatch c w >>= fun effects ->
+          return Transaction.(side_effects ++ effects)
+        ) side_effects (Transaction.get_unwatch r.side_effects) >>= fun side_effects ->
+        Lwt_list.fold_left_s (fun side_effects w ->
+          Connection.fire (Some limits) w >>= fun effects ->
+          return Transaction.(side_effects ++ effects)
+        ) side_effects (Transaction.get_watches r.side_effects) >>= fun side_effects ->
         Lwt_list.iter_s Introduce.introduce (Transaction.get_domains r.side_effects) >>= fun () ->
-        Database.persist r.side_effects >>= fun () ->
+        Database.persist side_effects >>= fun () ->
         (* Second transmit the response packet *)
         flush r.next_write_ofs >>= fun () ->
         Lwt_mutex.unlock write_m;
@@ -296,17 +308,17 @@ module Make = functor(T: S.TRANSPORT) -> struct
           (* If we crash here the packet will be dropped because we've not persisted
              the side-effects, including the write_ofs value: *)
 
-          PEffects.set { side_effects; next_read_ofs; next_write_ofs } peffects >>= fun () ->
-
+          PEffects.set { side_effects; next_read_ofs; next_write_ofs } peffects >>= fun side_effects ->
+          Database.persist side_effects >>= fun () ->
           loop () in
 			loop ()
 		with e ->
 			Lwt.cancel background_watch_event_flusher;
-			Connection.destroy address >>= fun () ->
       Mount.unmount connection_path >>= fun () ->
-      PEffects.destroy peffects >>= fun effects ->
-      Database.persist effects >>= fun () ->
-      Quota.remove dom >>= fun () ->
+			Connection.destroy address >>= fun effects1 ->
+      PEffects.destroy peffects >>= fun effects2 ->
+      Quota.remove dom >>= fun effects3 ->
+      Database.persist Transaction.(effects1 ++ effects2 ++ effects3) >>= fun () ->
       T.destroy t
 
 	let serve_forever persistence =

@@ -129,12 +129,12 @@ let reply_or_fail store limits perm c hdr (request: Request.t) : (Response.t * T
 
 	match request with
 		| Request.Transaction_start ->
-                        if tid <> Transaction.none
-                        then return (Response.Error "EBUSY", Transaction.no_side_effects ())
-                        else begin
-			  Connection.register_transaction limits c store >>= fun tid ->
-			  return (Response.Transaction_start tid, Transaction.no_side_effects ())
-                        end
+      if tid <> Transaction.none
+      then return (Response.Error "EBUSY", Transaction.no_side_effects ())
+      else begin
+        Connection.register_transaction limits c store >>= fun (tid, side_effects) ->
+			  return (Response.Transaction_start tid, side_effects)
+      end
 		| Request.Transaction_end commit ->
 			Connection.unregister_transaction c tid;
 			if commit then begin
@@ -172,33 +172,35 @@ let reply_or_fail store limits perm c hdr (request: Request.t) : (Response.t * T
 		| Request.Release(domid) ->
                         (try Perms.has perm Perms.RELEASE; return () with e -> fail e) >>= fun () ->
 			(* unregister domain *)
-			Connection.fire limits (Op.Write, Protocol.Name.(Predefined ReleaseDomain)) >>= fun () ->
+			Connection.fire limits (Op.Write, Protocol.Name.(Predefined ReleaseDomain)) >>= fun effects ->
+      Database.persist effects >>= fun () ->
 			return (Response.Release, Transaction.no_side_effects ())
 		| Request.Set_target(mine, yours) ->
-                        (try Perms.has perm Perms.SET_TARGET; return () with e -> fail e) >>= fun () ->
-                        let cs = Hashtbl.fold (fun _ c acc ->
-                                if (Connection.domid c) = mine then c :: acc else acc
-                        ) Connection.by_address [] in
-                        Lwt_list.iter_s (fun c ->
-                                let open Connection in
-                                PPerms.get (perm c) >>= fun current ->
-                                PPerms.set (Perms.set_target current yours) (perm c)
-                        ) cs >>= fun () ->
-			return (Response.Set_target, Transaction.no_side_effects ())
+      (try Perms.has perm Perms.SET_TARGET; return () with e -> fail e) >>= fun () ->
+      let cs = Hashtbl.fold (fun _ c acc ->
+        if (Connection.domid c) = mine then c :: acc else acc
+      ) Connection.by_address [] in
+      Lwt_list.fold_left_s (fun side_effects c ->
+        let open Connection in
+          PPerms.get (perm c) >>= fun current ->
+          PPerms.set (Perms.set_target current yours) (perm c) >>= fun effects ->
+          return Transaction.(side_effects ++ effects)
+      ) Transaction.(no_side_effects ()) cs >>= fun side_effects ->
+			return (Response.Set_target, side_effects)
 		| Request.Restrict domid ->
-                        (try Perms.has perm Perms.RESTRICT; return () with e -> fail e) >>= fun () ->
-                        Connection.PPerms.get (Connection.perm c) >>= fun current ->
-                        Connection.PPerms.set (Perms.restrict current domid) (Connection.perm c) >>= fun () ->
-			return (Response.Restrict, Transaction.no_side_effects ())
+      (try Perms.has perm Perms.RESTRICT; return () with e -> fail e) >>= fun () ->
+      Connection.PPerms.get (Connection.perm c) >>= fun current ->
+      Connection.PPerms.set (Perms.restrict current domid) (Connection.perm c) >>= fun side_effects ->
+			return (Response.Restrict, side_effects)
 		| Request.Isintroduced domid ->
-                        (try Perms.has perm Perms.ISINTRODUCED; return () with e -> fail e) >>= fun () ->
+      (try Perms.has perm Perms.ISINTRODUCED; return () with e -> fail e) >>= fun () ->
 			return (Response.Isintroduced false, Transaction.no_side_effects ())
 		| op ->
-                        (try
-			        let reply, side_effects = op_exn store limits perm c t op in
-			        if tid <> Transaction.none then Transaction.add_operation t op reply;
-			        return (reply, side_effects)
-                        with e -> fail e)
+      (try
+        let reply, side_effects = op_exn store limits perm c t op in
+        if tid <> Transaction.none then Transaction.add_operation t op reply;
+        return (reply, side_effects)
+       with e -> fail e)
 
 let reply store limits perm c hdr request : (Response.t * Transaction.side_effects) Lwt.t =
   gc store;
