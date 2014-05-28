@@ -27,13 +27,15 @@ let persister, persister_wakener = Lwt.task ()
 
 let persist side_effects =
   persister >>= fun p ->
-  Lwt_list.iter_s p (List.rev side_effects.Transaction.updates)
+  p (List.rev side_effects.Transaction.updates)
 
 let initialise = function
 | S.NoPersistence ->
   let s = Store.create () in
-  Lwt.wakeup persister_wakener (fun u ->
-    debug "Not persisting %s" (Sexp.to_string (Store.sexp_of_update u));
+  Lwt.wakeup persister_wakener (fun us ->
+    List.iter (fun u ->
+      debug "Not persisting %s" (Sexp.to_string (Store.sexp_of_update u));
+    ) us;
     return ()
   );
   Lwt.wakeup store_wakener s;
@@ -67,18 +69,27 @@ let initialise = function
     suffix' <= x' && (String.sub x (x' - suffix') suffix' = suffix) in
 
   (* These must all be idempotent *)
-  let p = function
-    | Store.Write(path, contents) ->
-      Printf.fprintf stderr "+ %s\n%!" (Protocol.Path.to_string path);
-      (try_lwt
-        DB.update db (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents))
-      with e -> (Printf.fprintf stderr "ERR %s\n%!" (Printexc.to_string e)); return ())
-    | Store.Rm path ->
-      Printf.fprintf stderr "- %s\n%!" (Protocol.Path.to_string path);
-      (try_lwt
-        DB.remove db (dir_of_filename path) >>= fun () ->
-        DB.remove db (value_of_filename path)
-      with e -> (Printf.fprintf stderr "ERR %s\n%!" (Printexc.to_string e)); return ()) in
+  let p us =
+    DB.View.create () >>= fun v ->
+    Lwt_list.iter_s
+      (function
+        | Store.Write(path, contents) ->
+          Printf.fprintf stderr "+ %s\n%!" (Protocol.Path.to_string path);
+          (try_lwt
+            DB.update db (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents))
+          with e -> (Printf.fprintf stderr "ERR %s\n%!" (Printexc.to_string e)); return ())
+        | Store.Rm path ->
+          Printf.fprintf stderr "- %s\n%!" (Protocol.Path.to_string path);
+          (try_lwt
+            DB.remove db (dir_of_filename path) >>= fun () ->
+            DB.remove db (value_of_filename path)
+          with e -> (Printf.fprintf stderr "ERR %s\n%!" (Printexc.to_string e)); return ())
+      ) us >>= fun () ->
+    DB.View.merge_path db [] v >>= function
+    | `Ok () -> return ()
+    | `Conflict msg ->
+      error "Conflict while merging database view: %s (this shouldn't happen, all backend transactions are serialised)" msg;
+      return () in
   let store = Store.create () in
   let t = Transaction.make Transaction.none store in
   DB.dump db >>= fun contents ->
