@@ -26,18 +26,34 @@ end)(struct type t = int with sexp end)
 
 let prefix = [ "tool"; "xenstored"; "quota" ]
 
+let maxent, maxent_wakener = Lwt.task ()
+let maxsize, maxsize_wakener = Lwt.task ()
+let maxwatch, maxwatch_wakener = Lwt.task ()
+let maxtransaction, maxtransaction_wakener = Lwt.task ()
+let maxwatchevent, maxwatchevent_wakener = Lwt.task ()
+let maxent_overrides, maxent_overrides_wakener = Lwt.task ()
+let maxwatch_overrides, maxwatch_overrides_wakener = Lwt.task ()
+let maxtransaction_overrides, maxtransaction_overrides_wakener = Lwt.task ()
 
-(* Global default quotas: *)
-let maxent         = Database.immediate (PRef.Int.create (prefix @ [ "default"; "number-of-entries" ]) 10000)
-let maxsize        = Database.immediate (PRef.Int.create (prefix @ [ "default"; "entry-length" ]) 4096)
-let maxwatch       = Database.immediate (PRef.Int.create (prefix @ [ "default"; "number-of-registered-watches" ]) 50)
-let maxtransaction = Database.immediate (PRef.Int.create (prefix @ [ "default"; "number-of-active-transactions" ]) 20)
-let maxwatchevent  = Database.immediate (PRef.Int.create (prefix @ [ "default"; "number-of-queued-watch-events" ]) 256)
-
-(* Per-domain quota overrides: *)
-let maxent_overrides         = Database.immediate (PerDomain.create (prefix @ [ "number-of-entries" ]))
-let maxwatch_overrides       = Database.immediate (PerDomain.create (prefix @ [ "number-of-registered-watches" ]))
-let maxtransaction_overrides = Database.immediate (PerDomain.create (prefix @ [ "number-of-active-transactions" ]))
+let _ =
+  PRef.Int.create (prefix @ [ "default"; "number-of-entries" ]) 10000 >>= fun (maxent, e1) ->
+  PRef.Int.create (prefix @ [ "default"; "entry-length" ]) 4096 >>= fun (maxsize, e2) ->
+  PRef.Int.create (prefix @ [ "default"; "number-of-registered-watches" ]) 50 >>= fun (maxwatch, e3) ->
+  PRef.Int.create (prefix @ [ "default"; "number-of-active-transactions" ]) 20 >>= fun (maxtransaction, e4) ->
+  PRef.Int.create (prefix @ [ "default"; "number-of-queued-watch-events" ]) 256 >>= fun (maxwatchevent, e5) ->
+  PerDomain.create (prefix @ [ "number-of-entries" ]) >>= fun (maxent_overrides, e6) ->
+  PerDomain.create (prefix @ [ "number-of-registered-watches" ]) >>= fun (maxwatch_overrides, e7) ->
+  PerDomain.create (prefix @ [ "number-of-active-transactions" ]) >>= fun (maxtransaction_overrides, e8) ->
+  Database.persist Transaction.(e1 ++ e2 ++ e3 ++ e4 ++ e5 ++ e6 ++ e7 ++ e8) >>= fun () ->
+  Lwt.wakeup maxent_wakener maxent;
+  Lwt.wakeup maxsize_wakener maxsize;
+  Lwt.wakeup maxwatch_wakener maxwatch;
+  Lwt.wakeup maxtransaction_wakener maxtransaction;
+  Lwt.wakeup maxwatchevent_wakener maxwatchevent;
+  Lwt.wakeup maxent_overrides_wakener maxent_overrides;
+  Lwt.wakeup maxwatch_overrides_wakener maxwatch_overrides;
+  Lwt.wakeup maxtransaction_overrides_wakener maxtransaction_overrides;
+  return ()
 
 let remove domid =
   maxent_overrides >>= fun maxent_overrides ->
