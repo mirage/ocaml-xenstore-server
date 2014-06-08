@@ -18,15 +18,8 @@ open Logging
 
 module POpBoolMap = PMap.Make(Protocol.Op)(struct type t = bool with sexp end)
 
-let requests =
-  POpBoolMap.create [ "tool"; "xenstored"; "log"; "request" ] >>= fun (t, effects) ->
-  Database.persist effects >>= fun () ->
-  return t
-
-let responses =
-  POpBoolMap.create [ "tool"; "xenstored"; "log"; "response" ] >>= fun (t, effects) ->
-  Database.persist effects >>= fun () ->
-  return t
+let requests, requests_wakener = Lwt.task ()
+let responses, responses_wakener = Lwt.task ()
 
 let request r =
   requests >>= fun requests ->
@@ -41,6 +34,9 @@ let response r =
   | true -> POpBoolMap.find (Protocol.Response.get_ty r) responses
 
 let _ =
+  POpBoolMap.create [ "tool"; "xenstored"; "log"; "request" ] >>= fun (requests, e1) ->
+  POpBoolMap.create [ "tool"; "xenstored"; "log"; "response" ] >>= fun (responses, e2) ->
+
   (* Populate every missing key with an explicit 'false' so that we can
      see what the keys are supposed to be *)
   let missing_becomes_false map =
@@ -51,8 +47,10 @@ let _ =
         return Transaction.(side_effects ++ effects)
       | true -> return side_effects
     ) (Transaction.no_side_effects ()) Protocol.Op.all in
-  requests >>= fun requests ->
-  missing_becomes_false requests >>= fun effects1 ->
-  responses >>= fun responses ->
-  missing_becomes_false responses >>= fun effects2 ->
-  Database.persist Transaction.(effects1 ++ effects2)
+  missing_becomes_false requests >>= fun e3 ->
+  missing_becomes_false responses >>= fun e4 ->
+  Database.persist Transaction.(e1 ++ e2 ++ e3 ++ e4) >>= fun () ->
+
+  Lwt.wakeup requests_wakener requests;
+  Lwt.wakeup responses_wakener responses;
+  return ()
