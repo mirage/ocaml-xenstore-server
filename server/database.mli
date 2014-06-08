@@ -14,7 +14,7 @@
 
 open Xenstore
 
-val persist: Transaction.side_effects -> unit Lwt.t
+val persist: ?origin:string -> Transaction.side_effects -> unit Lwt.t
 (** Persists the given side-effects. Make sure you start exactly one
     persistence thread *)
 

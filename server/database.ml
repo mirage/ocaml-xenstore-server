@@ -25,9 +25,9 @@ let error fmt = Logging.error "database" fmt
 let store, store_wakener = Lwt.task ()
 let persister, persister_wakener = Lwt.task ()
 
-let persist side_effects =
+let persist ?origin side_effects =
   persister >>= fun p ->
-  p (List.rev side_effects.Transaction.updates)
+  p ?origin (List.rev side_effects.Transaction.updates)
 
 let immediate f =
   f >>= fun (t, e) ->
@@ -37,9 +37,9 @@ let immediate f =
 let initialise = function
 | S.NoPersistence ->
   let s = Store.create () in
-  Lwt.wakeup persister_wakener (fun us ->
+  Lwt.wakeup persister_wakener (fun ?origin us ->
     List.iter (fun u ->
-      debug "Not persisting %s" (Sexp.to_string (Store.sexp_of_update u));
+      debug "%sNot persisting %s" (match origin with None -> "" | Some x -> x ^ ": ") (Sexp.to_string (Store.sexp_of_update u));
     ) us;
     return ()
   );
@@ -74,7 +74,7 @@ let initialise = function
     suffix' <= x' && (String.sub x (x' - suffix') suffix' = suffix) in
 
   (* These must all be idempotent *)
-  let p us =
+  let p ?origin us =
     DB.View.create () >>= fun v ->
     Lwt_list.iter_s
       (function
@@ -90,7 +90,10 @@ let initialise = function
             DB.View.remove v (value_of_filename path)
           with e -> (Printf.fprintf stderr "ERR %s\n%!" (Printexc.to_string e)); return ())
       ) us >>= fun () ->
-    DB.View.merge_path db [] v >>= function
+    let origin = match origin with
+    | None -> None
+    | Some o -> Some (IrminOrigin.create "%s" o) in
+    DB.View.merge_path ?origin db [] v >>= function
     | `Ok () -> return ()
     | `Conflict msg ->
       error "Conflict while merging database view: %s (this shouldn't happen, all backend transactions are serialised)" msg;

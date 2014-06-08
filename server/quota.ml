@@ -44,7 +44,7 @@ let _ =
   PerDomain.create (prefix @ [ "number-of-entries" ]) >>= fun (maxent_overrides, e6) ->
   PerDomain.create (prefix @ [ "number-of-registered-watches" ]) >>= fun (maxwatch_overrides, e7) ->
   PerDomain.create (prefix @ [ "number-of-active-transactions" ]) >>= fun (maxtransaction_overrides, e8) ->
-  Database.persist Transaction.(e1 ++ e2 ++ e3 ++ e4 ++ e5 ++ e6 ++ e7 ++ e8) >>= fun () ->
+  Database.persist ~origin:"Initialise the global quota settings." Transaction.(e1 ++ e2 ++ e3 ++ e4 ++ e5 ++ e6 ++ e7 ++ e8) >>= fun () ->
   Lwt.wakeup maxent_wakener maxent;
   Lwt.wakeup maxsize_wakener maxsize;
   Lwt.wakeup maxwatch_wakener maxwatch;

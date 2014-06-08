@@ -38,4 +38,6 @@ module Introspect = struct
     | _ -> []
 end
 
-let _ = Mount.mount (Protocol.Path.of_string "/tool/xenstored/entries") (module Introspect: Tree.S)
+let _ =
+  let origin = "Initialise the per-domain quota controls." in
+  Mount.mount ~origin (Protocol.Path.of_string "/tool/xenstored/entries") (module Introspect: Tree.S)

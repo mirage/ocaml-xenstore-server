@@ -85,14 +85,14 @@ module Tree = struct
     ) [] (all path)
 end
 
-let mount path implementation =
+let mount ?origin path implementation =
   mounts := Trie.set !mounts (Path.to_string_list path) implementation;
   Database.store >>= fun store ->
   let t = Transaction.make Transaction.none store in
   Transaction.mkdir t None 0 (Perms.of_domain 0) path;
-  Database.persist (Transaction.get_side_effects t)
+  Database.persist ?origin (Transaction.get_side_effects t)
 
-let unmount path =
+let unmount ?origin path =
   let key = Path.to_string_list path in
   if not(Trie.mem !mounts key)
   then return ()
@@ -102,5 +102,5 @@ let unmount path =
     let t = Transaction.make Transaction.none store in
     let ls = Transaction.ls t (Perms.of_domain 0) path in
     if ls = [] then Transaction.rm t (Perms.of_domain 0) path;
-    Database.persist (Transaction.get_side_effects t)
+    Database.persist ?origin (Transaction.get_side_effects t)
   end

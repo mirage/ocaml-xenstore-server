@@ -49,7 +49,7 @@ let _ =
     ) (Transaction.no_side_effects ()) Protocol.Op.all in
   missing_becomes_false requests >>= fun e3 ->
   missing_becomes_false responses >>= fun e4 ->
-  Database.persist Transaction.(e1 ++ e2 ++ e3 ++ e4) >>= fun () ->
+  Database.persist ~origin:"Initialise the global logging settings." Transaction.(e1 ++ e2 ++ e3 ++ e4) >>= fun () ->
 
   Lwt.wakeup requests_wakener requests;
   Lwt.wakeup responses_wakener responses;
