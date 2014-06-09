@@ -47,7 +47,6 @@ module Input = struct
     then return (t.seq, t.available)
     else begin
       Lwt_bytes.read t.fd t.full_buffer.Cstruct.buffer t.full_buffer.Cstruct.off t.full_buffer.Cstruct.len >>= fun n ->
-      Printf.fprintf stderr "XXX just read %d\n%!" n;
       t.available <- Cstruct.sub t.full_buffer 0 n;
       if n = 0
       then fail End_of_file

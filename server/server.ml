@@ -126,7 +126,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
 
         let offset = get_buffer_offset output in
         if next_write_ofs <> offset then begin
-          Printf.fprintf stderr "flush: packet is from the future\n%!";
+          (* packet is from the future *)
           return ()
         end else begin
           let length = get_buffer_length output in
@@ -147,7 +147,6 @@ module Make = functor(T: S.TRANSPORT) -> struct
           let to_write = min (Cstruct.len space) (Cstruct.len space') in
           Cstruct.blit space 0 space' 0 to_write;
           let next_offset = Int64.(add offset' (of_int to_write)) in
-          Printf.fprintf stderr "write acking %Ld\n%!" next_offset;
           T.Writer.ack t next_offset >>= fun () ->
           let remaining = to_write - (Cstruct.len space) in
           if remaining = 0
@@ -167,7 +166,6 @@ module Make = functor(T: S.TRANSPORT) -> struct
           | false ->
             return () ) >>= fun () ->
 
-        Printf.fprintf stderr "<- %s\n%!" (Sexp.to_string (Response.sexp_of_t response));
         let next = Protocol.Response.marshal response payload_buf in
         let length = next.Cstruct.off - payload_buf.Cstruct.off in
         let hdr = { Header.tid = 0l; rid = 0l; ty = Protocol.Response.get_ty response; len = length} in
@@ -192,7 +190,6 @@ module Make = functor(T: S.TRANSPORT) -> struct
           fail_on_error (Protocol.Header.unmarshal buffer) >>= fun hdr ->
           return (Protocol.Header.sizeof + hdr.Protocol.Header.len - length)
         end ) >>= fun bytes_needed ->
-      Printf.fprintf stderr "bytes_needed = %d\n%!" bytes_needed;
       if bytes_needed = 0
       then return () (* packet ready for reading, stream positioned at next packet *)
       else begin
@@ -210,26 +207,21 @@ module Make = functor(T: S.TRANSPORT) -> struct
             else return (offset, space') ) >>= fun (offset', space') ->
         (* 2. read as much as there is space for *)
         let to_copy = min (Cstruct.len space) (Cstruct.len space') in
-        Printf.fprintf stderr "copying %d bytes\n%!" to_copy;
         Cstruct.blit space' 0 space 0 to_copy;
         set_buffer_length input (length + to_copy);
 
         let next_offset = Int64.(add offset' (of_int to_copy)) in
         T.Reader.ack t next_offset >>= fun () ->
-        Printf.fprintf stderr "acking %Ld\n%!" next_offset;
         fill ()
       end in
 
     let rec read read_ofs =
-      Printf.fprintf stderr "read read_ofs=%Ld\n%!" read_ofs;
-      Printf.fprintf stderr "fill()\n%!";
       if get_buffer_offset input <> read_ofs then begin
-        Printf.fprintf stderr "fill dropping prevously buffered packet\n%!";
+        (* drop previously buffered packet *)
         set_buffer_length input 0;
         set_buffer_offset input read_ofs;
       end;
       fill () >>= fun () ->
-      Printf.fprintf stderr "fill complete\n%!";
 
         let buffer = get_buffer_buffer input in
         fail_on_error (Protocol.Header.unmarshal buffer) >>= fun hdr ->
