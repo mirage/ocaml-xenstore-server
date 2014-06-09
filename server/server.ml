@@ -83,7 +83,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
     lwt address = T.address_of t in
     let dom = T.domain_of t in
     let interface = introspect t in
-    Connection.create (address, dom) >>= fun (c, effects1) ->
+    Connection.create (address, dom) >>= fun (c, e1) ->
     let special_path name = [ "tool"; "xenstored"; name; (match Uri.scheme address with Some x -> x | None -> "unknown"); string_of_int (Connection.index c) ] in
 
     (* If this is a restart, there will be an existing side_effects entry.
@@ -96,7 +96,10 @@ module Make = functor(T: S.TRANSPORT) -> struct
       next_write_ofs;
     } in
 
-    PEffects.create (special_path "effects") initial_state >>= fun (peffects, effects2) ->
+    PEffects.create (special_path "effects") initial_state >>= fun (peffects, e2) ->
+
+    let connection_path = Protocol.Path.of_string_list (special_path "transport") in
+    Mount.mount connection_path interface >>= fun e3 ->
 
     PBuffer.create sizeof_buffer >>= fun poutput ->
     let output = PBuffer.get_cstruct poutput in
@@ -114,7 +117,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
       (Connection.index c) dom (match Uri.scheme address with None -> "unknown protocol" | Some x -> x)
       (String.concat "\n" (List.map (fun (path, v) -> Printf.sprintf "  %s: %s" (String.concat "/" path) v) (ls_lR t []))) in
 
-    Database.persist ~origin Transaction.(effects1 ++ effects2) >>= fun () ->
+    Database.persist ~origin Transaction.(e1 ++ e2 ++ e3) >>= fun () ->
 
     (* Flush any pending output to the channel. This function can suffer a crash and
        restart at any point. On exit, the output buffer is invalid and the whole
@@ -258,8 +261,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
         Lwt_mutex.unlock write_m;
         return ()
 			done in
-    let connection_path = Protocol.Path.of_string_list (special_path "transport") in
-    Mount.mount connection_path interface >>= fun () ->
+
     try_lwt
       let rec loop () =
         (* (Re-)complete any outstanding request. In the event of a crash
