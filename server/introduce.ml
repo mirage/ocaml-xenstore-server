@@ -31,7 +31,9 @@ let write x =
   Database.store >>= fun store ->
   let t = Transaction.make Transaction.none store in
   List.iter (fun (k, v) -> Transaction.write t None 0 (Perms.of_domain 0) k v) pairs;
-  Database.persist (Transaction.get_side_effects t)
+  let origin = Printf.sprintf "Reconnecting to domain %d ring\n\nConnection parameters:\n\n%s"
+    x.domid (String.concat "\n" (List.map (fun (k, v) -> "  " ^ (Protocol.Path.to_string k) ^ ": " ^ v) pairs)) in
+  Database.persist ~origin (Transaction.get_side_effects t)
 
 let introduce x =
   (* Persist the domain address immediately *)
@@ -69,4 +71,3 @@ let _ =
   ls () >>= fun existing ->
   List.iter (fun x -> introduce_fn (Some x)) existing;
   return ()
-
