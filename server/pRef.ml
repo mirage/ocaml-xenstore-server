@@ -30,7 +30,7 @@ module type S = sig
   val name: t -> string list
   (** [name t]: returns the [name] associated with the cell *)
 
-  val get: t -> v Lwt.t
+  val get: t -> (v * Transaction.side_effects) Lwt.t
   (** [get t]: returns the current value *)
 
   val set: v -> t -> Transaction.side_effects Lwt.t
@@ -92,8 +92,7 @@ module Make(V: S.SEXPABLE) = struct
 
   let get t =
     recreate t >>= fun (v, effects) ->
-    Database.persist effects >>= fun () ->
-    return v
+    return (v, effects)
 end
 
 open Sexplib.Std

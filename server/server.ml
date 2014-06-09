@@ -110,8 +110,8 @@ module Make = functor(T: S.TRANSPORT) -> struct
 
     (* XXX: write the input, output handles to the store *)
 
-    let origin = Printf.sprintf "Accepted connection from domain %d over %s\n\nInitial parameters:\n%s"
-      dom (match Uri.scheme address with None -> "unknown protocol" | Some x -> x)
+    let origin = Printf.sprintf "Accepted connection %d from domain %d over %s\n\nInitial parameters:\n%s"
+      (Connection.index c) dom (match Uri.scheme address with None -> "unknown protocol" | Some x -> x)
       (String.concat "\n" (List.map (fun (path, v) -> Printf.sprintf "  %s: %s" (String.concat "/" path) v) (ls_lR t []))) in
 
     Database.persist ~origin Transaction.(effects1 ++ effects2) >>= fun () ->
@@ -267,9 +267,9 @@ module Make = functor(T: S.TRANSPORT) -> struct
            idempotent. *)
 
         (* First execute the idempotent side_effects *)
-        PEffects.get peffects >>= fun r ->
-        Quota.limits_of_domain dom >>= fun limits ->
-        let side_effects = r.side_effects in
+        PEffects.get peffects >>= fun (r, e1) ->
+        Quota.limits_of_domain dom >>= fun (limits, e2) ->
+        let side_effects = Transaction.(e1 ++ e2) in
         Lwt_list.fold_left_s (fun side_effects w ->
           Connection.watch c (Some limits) w >>= fun effects ->
           return Transaction.(side_effects ++ effects)
@@ -282,8 +282,17 @@ module Make = functor(T: S.TRANSPORT) -> struct
           Connection.fire (Some limits) w >>= fun effects ->
           return Transaction.(side_effects ++ effects)
         ) side_effects (Transaction.get_watches r.side_effects) >>= fun side_effects ->
+        Quota.limits_of_domain dom >>= fun (limits, e) ->
+        let side_effects = Transaction.(side_effects ++ e) in
+        Connection.PPerms.get (Connection.perm c) >>= fun (perm, e) ->
+        let side_effects = Transaction.(side_effects ++ e) in
         Lwt_list.iter_s Introduce.introduce (Transaction.get_domains r.side_effects) >>= fun () ->
-        Database.persist side_effects >>= fun () ->
+
+        let origin =
+          Printf.sprintf "Resynchronising state for connection %d domain %d"
+          (Connection.index c) dom in
+        Database.persist ~origin side_effects >>= fun () ->
+        
         (* Second transmit the response packet *)
         flush r.next_write_ofs >>= fun () ->
         Lwt_mutex.unlock write_m;
@@ -295,8 +304,6 @@ module Make = functor(T: S.TRANSPORT) -> struct
           | read_ofs, `Ok (hdr, request) ->
 	          Connection.pop_watch_events_nowait c >>= fun events ->
             Database.store >>= fun store ->
-            Quota.limits_of_domain dom >>= fun limits ->
-            Connection.PPerms.get (Connection.perm c) >>= fun perm ->
 
             Lwt_mutex.lock write_m >>= fun () ->
             (* This will 'commit' updates to the in-memory store: *)

@@ -47,8 +47,9 @@ let rpc store c tid request =
         let hdr = { Protocol.Header.tid; rid = 0l; ty = Protocol.Request.get_ty request; len = 0 } in
         debug "store = %s" (Sexp.to_string (Store.sexp_of_t store));
         try
-                Quota.limits_of_domain (Connection.domid c) >>= fun limits ->
-                Connection.PPerms.get (Connection.perm c) >>= fun perm ->
+                Quota.limits_of_domain (Connection.domid c) >>= fun (limits, e1) ->
+                Connection.PPerms.get (Connection.perm c) >>= fun (perm, e2) ->
+                Database.persist Transaction.(e1 ++ e2) >>= fun () ->
                 Call.reply store (Some limits) perm c hdr request >>= fun (response, side_effects) ->
                 debug "request = %s response = %s side_effects = %s" (Sexp.to_string (Protocol.Request.sexp_of_t request)) (Sexp.to_string (Protocol.Response.sexp_of_t response)) (Sexp.to_string (Transaction.sexp_of_side_effects side_effects));
                 let iter_persist f xs =

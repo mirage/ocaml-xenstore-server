@@ -227,11 +227,11 @@ let register_transaction limits con store =
       end else return ()
     | None -> return ()
   ) >>= fun () ->
-  PInt32.get con.next_tid >>= fun id ->
-  PInt32.set (Int32.succ id) con.next_tid >>= fun effects ->
+  PInt32.get con.next_tid >>= fun (id, e1) ->
+  PInt32.set (Int32.succ id) con.next_tid >>= fun e2 ->
   let ntrans = Transaction.make id store in
   Hashtbl.add con.transactions id ntrans;
-  return (id, effects)
+  return (id, Transaction.(e1 ++ e2))
 
 let unregister_transaction con tid =
 	Hashtbl.remove con.transactions tid

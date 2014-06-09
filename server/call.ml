@@ -182,16 +182,16 @@ let reply_or_fail store limits perm c hdr (request: Request.t) : (Response.t * T
       ) Connection.by_address [] in
       Lwt_list.fold_left_s (fun side_effects c ->
         let open Connection in
-          PPerms.get (perm c) >>= fun current ->
-          PPerms.set (Perms.set_target current yours) (perm c) >>= fun effects ->
-          return Transaction.(side_effects ++ effects)
+          PPerms.get (perm c) >>= fun (current, e1) ->
+          PPerms.set (Perms.set_target current yours) (perm c) >>= fun e2 ->
+          return Transaction.(side_effects ++ e1 ++ e2)
       ) Transaction.(no_side_effects ()) cs >>= fun side_effects ->
 			return (Response.Set_target, side_effects)
 		| Request.Restrict domid ->
       (try Perms.has perm Perms.RESTRICT; return () with e -> fail e) >>= fun () ->
-      Connection.PPerms.get (Connection.perm c) >>= fun current ->
-      Connection.PPerms.set (Perms.restrict current domid) (Connection.perm c) >>= fun side_effects ->
-			return (Response.Restrict, side_effects)
+      Connection.PPerms.get (Connection.perm c) >>= fun (current, e1) ->
+      Connection.PPerms.set (Perms.restrict current domid) (Connection.perm c) >>= fun e2 ->
+			return (Response.Restrict, Transaction.(e1 ++ e2))
 		| Request.Isintroduced domid ->
       (try Perms.has perm Perms.ISINTRODUCED; return () with e -> fail e) >>= fun () ->
 			return (Response.Isintroduced false, Transaction.no_side_effects ())
