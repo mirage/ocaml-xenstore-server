@@ -27,6 +27,9 @@ type update =
 | Rm of Protocol.Path.t
 with sexp
 
+val string_of_update: update -> string
+(** [string_of_update] return a pretty-printed version of [update] *)
+
 val getdomainpath: int -> Protocol.Name.t
 (** [getdomainpath domid] returns the default directory for [domid] *)
 

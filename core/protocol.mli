@@ -198,7 +198,7 @@ module Name : sig
 
   val relative: t -> t -> t
   (** [relative t base]: if [t] and [base] are absolute and [base] is a prefix
-      of [t], return a relative path which refers to [t] when resolved 
+      of [t], return a relative path which refers to [t] when resolved
       relative to [base]. *)
 
   val to_path: t -> Path.t
@@ -227,6 +227,9 @@ module ACL : sig
     acl: (domid * perm) list; (** ... unless overridden in the ACL *)
   } with sexp
   (** an access control list *)
+
+  val to_string: t -> string
+  (** Print an ACL in the same format as 'xenstore-ls' *)
 
   val unmarshal: Cstruct.t -> (t, string) result
   (** [unmarshal buf] reads a [t] from [buf] or produces a descriptive error

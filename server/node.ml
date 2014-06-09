@@ -20,6 +20,11 @@ type contents = {
   value: string;
 } with sexp
 
+let string_of_contents c =
+  Printf.sprintf "\"%s\" [creator %d] [perms %s]"
+    (String.escaped c.value) c.creator
+    (Protocol.ACL.to_string c.perms)
+
 type t = {
   name: Symbol.t;
   contents: contents;
@@ -39,7 +44,7 @@ let get_symbol node = node.name
 
 let get_value node = node.contents.value
 
-let set_value node nvalue = 
+let set_value node nvalue =
 	if node.contents.value = nvalue
 	then node
         else { node with contents = { node.contents with value = nvalue } }

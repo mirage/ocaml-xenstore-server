@@ -23,6 +23,9 @@ type contents = {
 } with sexp
 (** The data contained within a Node in the tree *)
 
+val string_of_contents: contents -> string
+(** [string_of_contents contents] return a pretty-printed version of contents *)
+
 val create : string -> int -> Protocol.ACL.t -> string -> t
 (** [create name creator perms value] returns fresh Node.t *)
 

@@ -390,7 +390,7 @@ module Unmarshal = struct
     c c' >>= fun c'' ->
     return (a'', b'', c'')
   | _ -> `Error(Printf.sprintf "Failed to unmarshal a triple: got \"%s\"" (String.escaped (Cstruct.to_string x))))
-  
+
   let string    x = x |> null |> Cstruct.to_string |> return
   let int       x = x |> null |> Cstruct.to_string |> expect_int
   let int32     x = x |> null |> Cstruct.to_string |> expect_int32
@@ -428,6 +428,10 @@ module ACL = struct
     other: perm;              (** default permissions for all others... *)
     acl: (domid * perm) list; (** ... unless overridden in the ACL *)
   } with sexp
+
+  let to_string t =
+    Printf.sprintf "%d%c%s" t.owner (char_of_perm t.other)
+       (String.concat "" (List.map (fun (domid, perm) -> Printf.sprintf ",%d%c" domid (char_of_perm perm)) t.acl))
 
   let marshal perms buf =
     Marshal.list (fun (domid, perm) buf -> buf

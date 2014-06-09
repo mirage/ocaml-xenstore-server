@@ -33,6 +33,12 @@ type update =
 | Rm of Protocol.Path.t
 with sexp
 
+let string_of_update = function
+| Write (p, contents) ->
+  Printf.sprintf "write %s <- %s" (Protocol.Path.to_string p) (Node.string_of_contents contents)
+| Rm p ->
+  Printf.sprintf "rm %s" (Protocol.Path.to_string p)
+
 let get store creator =
   if Hashtbl.mem store.created creator then Hashtbl.find store.created creator else 0
 
@@ -128,12 +134,12 @@ let rm store perm path = match Node.lookup store.root path with
   (* Deletes are recursive *)
   let rec traverse path acc node =
     decr store (Node.get_creator node);
-    let path = Node.get_name node :: path in 
+    let path = Node.get_name node :: path in
     let acc = Rm (Protocol.Path.of_string_list (List.rev path)) :: acc in
     List.fold_left (traverse path) acc (Node.get_children node) in
   let updates = traverse (List.rev (Protocol.Path.(to_string_list(dirname path)))) [] node in
   store.root <- root';
-  updates 
+  updates
 
 let setperms store perm path nperms = match Node.lookup store.root path with
 | None -> raise (Node.Doesnt_exist path)

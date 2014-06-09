@@ -330,8 +330,20 @@ module Make = functor(T: S.TRANSPORT) -> struct
           (* If we crash here the packet will be dropped because we've not persisted
              the side-effects, including the write_ofs value: *)
 
-          PEffects.set { side_effects; next_read_ofs; next_write_ofs } peffects >>= fun side_effects ->
-          Database.persist side_effects >>= fun () ->
+          PEffects.set { side_effects; next_read_ofs; next_write_ofs } peffects >>= fun e ->
+          let origin =
+            Printf.sprintf "Journalling state for connection %d domain %d"
+            (Connection.index c) dom in
+          Database.persist ~origin e >>= fun () ->
+          let updates = Transaction.get_updates side_effects in
+          begin match updates with
+          | [] -> return ()
+          | _ ->
+            let origin = Printf.sprintf "Transaction from connection %d domain %d\n\n%s"
+              (Connection.index c) dom
+              (String.concat "\n" (List.map Store.string_of_update updates)) in
+            Database.persist ~origin side_effects
+          end >>= fun () ->
           loop () in
 			loop ()
 		with e ->
