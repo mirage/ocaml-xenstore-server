@@ -13,6 +13,7 @@
  *)
 
 open Lwt
+open Xenstore
 
 let xenstored_proc_port = "/proc/xen/xsd_port"
 let xenstored_proc_kva = "/proc/xen/xsd_kva"
@@ -95,11 +96,11 @@ let fold_over_packets f init c =
 					let remaining = Cstruct.shift remaining hdr.Protocol.Header.len in
 					loop remaining (f acc (hdr, data))
 			end in
-	loop c init	
+	loop c init
 
 let count_packets c = List.length (fold_over_packets (fun acc p -> p :: acc) [] c)
 
-let printable = function 
+let printable = function
 	| 'a' .. 'z'
 	| 'A' .. 'Z'
 	| '0' .. '9'
@@ -308,9 +309,9 @@ end
 let _common_options = "COMMON OPTIONS"
 
 (* Options common to all commands *)
-let common_options_t = 
-	let docs = _common_options in 
-	let debug = 
+let common_options_t =
+	let docs = _common_options in
+	let debug =
 		let doc = "Give only debug output." in
 		Arg.(value & flag & info ["debug"] ~docs ~doc) in
 	Term.(pure Common.make $ debug)
@@ -350,16 +351,15 @@ let analyse_cmd =
 	Term.(ret(pure analyse $ filename)),
 	Term.info "analyse" ~sdocs:_common_options ~doc ~man
 
-let default_cmd = 
-	let doc = "analyse xenstore rings" in 
+let default_cmd =
+	let doc = "analyse xenstore rings" in
 	let man = help in
 	Term.(ret (pure (fun _ -> `Help (`Pager, None)) $ common_options_t)),
 	Term.info "dbgring" ~version:"1.0.0" ~sdocs:_common_options ~doc ~man
-       
+
 let cmds = [ dump_cmd; analyse_cmd ]
 
 let _ =
 	match Term.eval_choice default_cmd cmds with
 	| `Error _ -> exit 1
 	| _ -> exit 0
-

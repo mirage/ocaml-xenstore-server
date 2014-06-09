@@ -13,6 +13,7 @@
  *)
 
 open Lwt
+open Xenstore
 open Protocol
 module Client = Client.Make(Sockets)
 open Client

@@ -311,6 +311,9 @@ true: annot
 <cli/*.ml>: pkg_lwt.syntax
 <bench/*.ml>: pkg_lwt.syntax
 <core>: include
+<core/s.ml>: pkg_sexplib.syntax
+<unix/sockets.ml>: pkg_sexplib.syntax
+<userspace/interdomain.ml>: pkg_sexplib.syntax
 <client_lwt>: include
 <client_unix>: include
 <server>: include

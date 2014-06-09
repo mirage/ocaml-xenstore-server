@@ -15,4 +15,6 @@
 val xenstored_socket: string ref
 (** path to the xenstored Unix domain socket *)
 
-include S.TRANSPORT
+open Xenstore
+
+include S.SERVER

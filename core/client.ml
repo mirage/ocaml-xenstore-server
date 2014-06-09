@@ -80,7 +80,7 @@ let fail_on_error = function
 | `Ok x -> return x
 | `Error x -> fail (Failure x)
 
-module Make = functor(IO: S.TRANSPORT) -> struct
+module Make = functor(IO: S.CONNECTION) -> struct
 
   type 'a t = 'a IO.t
   let ( >>= ) = IO.( >>= )

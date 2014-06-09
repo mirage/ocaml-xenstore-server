@@ -13,6 +13,7 @@
  *)
 
 open Lwt
+open Xenstore
 open Protocol
 module Client = Client.Make(Sockets)
 open Client
@@ -45,8 +46,8 @@ module Device = struct
 type kind = Vif | Vbd | Tap | Pci | Vfs | Vfb | Vkbd
 
 let kind_of_string = function
-  | "vif" -> Some Vif | "vbd" -> Some Vbd | "tap" -> Some Tap 
-  | "pci" -> Some Pci | "vfs" -> Some Vfs | "vfb" -> Some Vfb 
+  | "vif" -> Some Vif | "vbd" -> Some Vbd | "tap" -> Some Tap
+  | "pci" -> Some Pci | "vfs" -> Some Vfs | "vfb" -> Some Vfb
   | "vkbd" -> Some Vkbd
   | x -> None
 
@@ -58,12 +59,12 @@ type devid = int
 type endpoint = { domid: int; kind: kind; devid: int }
 
 (** Represent a device as a pair of endpoints *)
-type device = { 
+type device = {
   frontend: endpoint;
   backend: endpoint
 }
 
-let parse_int i = 
+let parse_int i =
 	try
 		Some (int_of_string i)
 	with _ -> None
@@ -78,7 +79,7 @@ let rec split ?limit:(limit=(-1)) c s =
 		and b = String.sub s (i + 1) (String.length s - i - 1) in
 		a :: (split ~limit: nlimit c b)
 
-let parse_backend_link x = 
+let parse_backend_link x =
 	match split '/' x with
 		| [ ""; "local"; "domain"; domid; "backend"; kind; _; devid ] ->
 			begin
@@ -100,7 +101,7 @@ let list_kinds dir client =
 (* NB: we only read data from the frontend directory. Therefore this gives
    the "frontend's point of view". *)
 let list_frontends domid client =
-	lwt dom_path = getdomainpath domid client in 
+	lwt dom_path = getdomainpath domid client in
 	let frontend_dir = dom_path ^ "/device" in
 	lwt kinds = list_kinds frontend_dir client in
 
@@ -129,7 +130,7 @@ let list_frontends domid client =
 (** Location of the backend in xenstore *)
 let backend_path_of_device (x: device) client =
 	lwt dom_path = getdomainpath x.backend.domid client in
-	return (Printf.sprintf "%s/backend/%s/%u/%d" 
+	return (Printf.sprintf "%s/backend/%s/%u/%d"
 		dom_path
 		(string_of_kind x.backend.kind)
 		x.frontend.domid x.backend.devid)
@@ -177,14 +178,14 @@ let private_path = prefix ^ "/xapi"
 (* The private data path is only used by xapi and ignored by frontend and backend *)
 let get_private_path domid = Printf.sprintf "%s/%d" private_path domid
 
-let get_private_data_path_of_device (x: device) = 
+let get_private_data_path_of_device (x: device) =
 	Printf.sprintf "%s/private/%s/%d" (get_private_path x.frontend.domid) (string_of_kind x.backend.kind) x.backend.devid
 
 (* Path in xenstore where we stuff our transient hotplug-related stuff *)
 let get_hotplug_path (x: device) =
 	Printf.sprintf "%s/hotplug/%s/%d" (get_private_path x.frontend.domid) (string_of_kind x.backend.kind) x.backend.devid
 
-let get_private_data_path_of_device (x: device) = 
+let get_private_data_path_of_device (x: device) =
 	Printf.sprintf "%s/private/%s/%d" (get_private_path x.frontend.domid) (string_of_kind x.backend.kind) x.backend.devid
 
 let rm_device_state (x: device) client =
@@ -308,7 +309,7 @@ let make domid client =
 
 			lwt () = Lwt_list.iter_s (fun (x, y) -> write xs (dom_path ^ "/platform/" ^ x) y) platformdata in
 			lwt () = Lwt_list.iter_s (fun (x, y) -> write xs (dom_path ^ "/bios-strings/" ^ x) y) bios_strings in
-	
+
 			(* If a toolstack sees a domain which it should own in this state then the
 			   domain is not completely setup and should be shutdown. *)
 			lwt () = write xs (dom_path ^ "/action-request") "poweroff" in
@@ -349,7 +350,7 @@ let destroy domid client =
 	(* These are the devices with a frontend in [domid] and a well-formed backend
 	   in some other domain *)
 	lwt all_devices = Device.list_frontends domid client in
-	
+
 	(* Forcibly shutdown every backend *)
 	lwt () = Lwt_list.iter_s
 		(fun device ->
@@ -419,7 +420,7 @@ let parallel n client =
 
 let query m n client =
 	lwt () = Lwt_list.iter_s
-	(fun domid -> 
+	(fun domid ->
 		vm_start domid client
 	) (between 0 n) in
 	lwt () = for_lwt i = 0 to m do
@@ -429,7 +430,7 @@ let query m n client =
 		) (between 0 n)
 	done in
 	lwt () = Lwt_list.iter_s
-	(fun domid -> 
+	(fun domid ->
 		vm_shutdown domid client
 	) (between 0 n) in
 	return ()

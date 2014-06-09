@@ -13,4 +13,4 @@
  *)
 open Xenstore
 
-include S.TRANSPORT
+include S.SERVER

@@ -13,4 +13,6 @@
  *)
 open Xenstore
 
-module Make : functor(T: S.TRANSPORT) -> S.SERVER
+module Make : functor(T: S.SERVER) -> sig
+  val serve_forever: S.persistence -> unit Lwt.t
+end

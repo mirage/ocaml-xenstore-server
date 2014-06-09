@@ -11,7 +11,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *)
-
+open Sexplib.Std
 open Lwt
 open Xenstore
 open Xenstored
@@ -26,10 +26,64 @@ open Introduce
 let debug fmt = Logging.debug "xs_transport_xen" fmt
 let error fmt = Logging.error "xs_transport_xen" fmt
 
+let fail_on_error = function
+| `Ok x -> return x
+| `Error x -> fail (Failure x)
+
+(* We store the next whole packet to transmit in this persistent buffer.
+   The contents are only valid iff valid <> 0 *)
+cstruct buffer {
+  uint16_t length; (* total number of payload bytes in buffer. *)
+  uint64_t offset; (* offset in the output stream to write first byte *)
+  uint8_t buffer[4112];
+} as little_endian
+let _ = assert(4112 = Protocol.xenstore_payload_max + Protocol.Header.sizeof)
+
+module PBuffer = struct
+  type handle = int64
+
+  type t = {
+    handle: handle;
+    buffer: Cstruct.t;
+  }
+
+  let table : (int64, t) Hashtbl.t = Hashtbl.create 10
+
+  open Lwt
+
+  let fresh_handle =
+    let next = ref 0L in
+    fun () ->
+      let this = !next in
+      next := Int64.succ !next;
+      this
+
+  let create size =
+    let handle = fresh_handle () in
+    let buffer = Cstruct.create size in
+    let t = { handle; buffer } in
+    Hashtbl.replace table handle t;
+    return t
+
+  let destroy t =
+    Hashtbl.remove table t.handle;
+    return ()
+
+  let get_cstruct t = t.buffer
+  let handle t = t.handle
+
+  let lookup handle =
+    if Hashtbl.mem table handle
+    then return (Some (Hashtbl.find table handle))
+    else return None
+end
+
 type connection = {
   address: address;
   page: Io_page.t;
   ring: Cstruct.t;
+  input: Cstruct.t;
+  output: Cstruct.t;
   port: int;
   c: unit Lwt_condition.t;
   mutable shutdown: bool;
@@ -120,54 +174,43 @@ let service_domain d =
     else loop after in
   loop Unix_activations.program_start
 
-let create_dom0 () =
-  (* this function should be idempotent *)
-  if Hashtbl.mem domains 0
-  then return (Some (Hashtbl.find domains 0))
-  else
-    lwt remote_port = read_port () in
-    let eventchn = Eventchn.init () in
-    let page = map_page xenstored_proc_kva in
-    let port = Eventchn.(bind_interdomain eventchn 0 remote_port) in
-    Eventchn.notify eventchn port;
-    let port = Eventchn.to_int port in
-    let d = {
-      address = {
-        domid = 0;
-        mfn = Nativeint.zero;
-        remote_port = remote_port;
-      };
-      page = page;
-      ring = Cstruct.of_bigarray page;
-      port = port;
-      c = Lwt_condition.create ();
-      shutdown = false;
-    } in
-    let (_: unit Lwt.t) = service_domain d in
-    Hashtbl.add domains 0 d;
-    Hashtbl.add by_port port d;
-    return (Some d)
-
-let create_domU address =
+let from_address address =
   (* this function should be idempotent *)
   if Hashtbl.mem domains address.domid
-  then return (Some (Hashtbl.find domains address.domid))
-  else
-    let page = Domains.map_foreign address.domid address.mfn in
+  then return (Hashtbl.find domains address.domid)
+  else begin
+    (* On initial startup, Main doesn't know the remote port. *)
+    ( if address.domid = 0 then begin
+        read_port () >>= fun remote_port ->
+        return { address with remote_port }
+      end else return address ) >>= fun address ->
+    let page = match address.domid with
+    | 0 -> map_page xenstored_proc_kva
+    | _ -> Domains.map_foreign address.domid address.mfn in
     let eventchn = Eventchn.init () in
     let port = Eventchn.(to_int (bind_interdomain eventchn address.domid address.remote_port)) in
+
+    PBuffer.create sizeof_buffer >>= fun poutput ->
+    let output = PBuffer.get_cstruct poutput in
+    set_buffer_offset output 0L;
+    set_buffer_length output 0;
+    (* This output buffer is safe to flush *)
+    PBuffer.create sizeof_buffer >>= fun pinput ->
+    let input = PBuffer.get_cstruct pinput in
+    set_buffer_offset input 0L;
+    set_buffer_length input 0;
+
+    let ring = Cstruct.of_bigarray page in
     let d = {
-      address = address;
-      page = page;
-      ring = Cstruct.of_bigarray page;
-      port = port;
+      address; page; ring; port; input; output;
       c = Lwt_condition.create ();
       shutdown = false;
     } in
     let (_: unit Lwt.t) = service_domain d in
     Hashtbl.add domains address.domid d;
     Hashtbl.add by_port port d;
-    return (Some d)
+    return d
+  end
 
 let create () =
   failwith "It's not possible to directly 'create' an interdomain ring."
@@ -188,7 +231,6 @@ module Reader = struct
     Eventchn.(notify (init ()) (of_int t.port));
     return ()
 end
-
 
 let read t buf =
   let rec loop buf =
@@ -248,45 +290,123 @@ let write t buf =
       end in
   loop buf
 
-module PBuffer = struct
-  type handle = int64
+type offset = int64 with sexp
 
-  type t = {
-    handle: handle;
-    buffer: Cstruct.t;
-  }
-
-  let table : (int64, t) Hashtbl.t = Hashtbl.create 10
-
-  open Lwt
-
-  let fresh_handle =
-    let next = ref 0L in
-    fun () ->
-      let this = !next in
-      next := Int64.succ !next;
-      this
-
-  let create size =
-    let handle = fresh_handle () in
-    let buffer = Cstruct.create size in
-    let t = { handle; buffer } in
-    Hashtbl.replace table handle t;
-    return t
-
-  let destroy t =
-    Hashtbl.remove table t.handle;
+(* Flush any pending output to the channel. This function can suffer a crash and
+   restart at any point. On exit, the output buffer is invalid and the whole
+   packet has been transmitted. *)
+let rec flush t next_write_ofs =
+  let offset = get_buffer_offset t.output in
+  if next_write_ofs <> offset then begin
+    (* packet is from the future *)
     return ()
+  end else begin
+    let length = get_buffer_length t.output in
+    Writer.next t >>= fun (offset', space') ->
+    let space = Cstruct.sub (get_buffer_buffer t.output) 0 length in
+    (* write as much of (offset, space) into (offset', space') as possible *)
+    (* 1. skip any already-written data, check we haven't lost any *)
+    ( if offset < offset'
+      then
+        let to_skip = Int64.sub offset' offset in
+        return (offset', Cstruct.shift space (Int64.to_int to_skip))
+      else
+        if offset > offset'
+        then fail (Failure (Printf.sprintf "Some portion of the output stream has been skipped. Our data starts at %Ld, the stream starts at %Ld" offset offset'))
+        else return (offset, space)
+    ) >>= fun (offset, space) ->
+    (* 2. write as much as there is space for *)
+    let to_write = min (Cstruct.len space) (Cstruct.len space') in
+    Cstruct.blit space 0 space' 0 to_write;
+    let next_offset = Int64.(add offset' (of_int to_write)) in
+    Writer.ack t next_offset >>= fun () ->
+    let remaining = to_write - (Cstruct.len space) in
+    if remaining = 0
+    then return ()
+    else flush t next_write_ofs
+  end
 
-  let get_cstruct t = t.buffer
-  let handle t = t.handle
+(* Enqueue an output packet. This assumes that the output buffer is empty. *)
+let enqueue t response =
+  let reply_buf = get_buffer_buffer t.output in
+  let payload_buf = Cstruct.shift reply_buf Protocol.Header.sizeof in
 
-  let lookup handle =
-    if Hashtbl.mem table handle
-    then return (Some (Hashtbl.find table handle))
-    else return None
-end
+  let next = Protocol.Response.marshal response payload_buf in
+  let length = next.Cstruct.off - payload_buf.Cstruct.off in
+  let hdr = { Protocol.Header.tid = 0l; rid = 0l; ty = Protocol.Response.get_ty response; len = length} in
+  ignore (Protocol.Header.marshal hdr reply_buf);
+  Writer.next t >>= fun (offset, _) ->
+  set_buffer_length t.output (length + Protocol.Header.sizeof);
+  set_buffer_offset t.output offset;
+  return offset
 
+(* [fill ()] fills up input with the next request. This function can crash and
+   be restarted at any point. On exit, a whole packet is available for unmarshalling
+   and the next packet is still on the ring. *)
+let rec fill t =
+  (* compute the maximum number of bytes we definitely need *)
+  let length = get_buffer_length t.input in
+  let offset = get_buffer_offset t.input in
+  let buffer = get_buffer_buffer t.input in
+  ( if length < Protocol.Header.sizeof
+    then return (Protocol.Header.sizeof - length)
+    else begin
+      (* if we have the header then we know how long the payload is *)
+      fail_on_error (Protocol.Header.unmarshal buffer) >>= fun hdr ->
+      return (Protocol.Header.sizeof + hdr.Protocol.Header.len - length)
+    end ) >>= fun bytes_needed ->
+  if bytes_needed = 0
+  then return () (* packet ready for reading, stream positioned at next packet *)
+  else begin
+    let offset = Int64.(add offset (of_int length)) in
+    let space = Cstruct.sub buffer length bytes_needed in
+    Reader.next t >>= fun (offset', space') ->
+    (* 1. skip any already-read data, check we haven't lost any *)
+    ( if offset < offset'
+      then fail (Failure (Printf.sprintf "Some portion of the input stream has been skipped. We need data from %Ld, the stream starts at %Ld" offset offset'))
+      else
+        if offset > offset'
+        then
+          let to_skip = Int64.sub offset offset' in
+          return (offset, Cstruct.shift space' (Int64.to_int to_skip))
+        else return (offset, space') ) >>= fun (offset', space') ->
+    (* 2. read as much as there is space for *)
+    let to_copy = min (Cstruct.len space) (Cstruct.len space') in
+    Cstruct.blit space' 0 space 0 to_copy;
+    set_buffer_length t.input (length + to_copy);
+
+    let next_offset = Int64.(add offset' (of_int to_copy)) in
+    Reader.ack t next_offset >>= fun () ->
+    fill t
+  end
+
+let rec recv t read_ofs =
+  if get_buffer_offset t.input <> read_ofs then begin
+    (* drop previously buffered packet *)
+    set_buffer_length t.input 0;
+    set_buffer_offset t.input read_ofs;
+  end;
+  fill t >>= fun () ->
+
+  let buffer = get_buffer_buffer t.input in
+  fail_on_error (Protocol.Header.unmarshal buffer) >>= fun hdr ->
+  let payload = Cstruct.sub buffer Protocol.Header.sizeof hdr.Protocol.Header.len in
+  (* return the read_ofs value a future caller would need to get the next packet *)
+  let read_ofs' = Int64.(add read_ofs (of_int (get_buffer_length t.input))) in
+  match Protocol.Request.unmarshal hdr payload with
+   | `Ok r ->
+     return (read_ofs', `Ok (hdr, r))
+   | `Error e ->
+     return (read_ofs', `Error e)
+
+let get_read_offset t =
+  Reader.next t >>= fun (next_read_ofs, _) ->
+  return next_read_ofs
+
+let get_write_offset t =
+  Writer.next t >>= fun (next_write_ofs, _) ->
+  return next_write_ofs
+  
 let destroy t =
   let eventchn = Eventchn.init () in
   Eventchn.(unbind eventchn (of_int t.port));
@@ -310,15 +430,9 @@ let listen () =
   return stream
 
 let rec accept_forever stream process =
-  lwt address = Lwt_stream.next stream in
-  lwt d = if address.domid = 0 then create_dom0 () else create_domU address in
-  begin match d with
-  | Some d ->
-    let (_: unit Lwt.t) = process d in
-    ()
-  | None ->
-    ()
-  end;
+  Lwt_stream.next stream >>= fun address ->
+  from_address address >>= fun d ->
+  let (_: unit Lwt.t) = process d in
   accept_forever stream process
 
 module Introspect = struct

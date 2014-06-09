@@ -11,6 +11,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *)
+open Sexplib.Std
+open Xenstore
 
 (** A byte-level transport over the xenstore Unix domain socket *)
 
@@ -28,6 +30,7 @@ type 'a t = 'a Lwt.t
 let return x = return x
 let ( >>= ) m f = m >>= f
 
+(*
 module Input = struct
   type t = {
     fd: Lwt_unix.file_descr;
@@ -59,6 +62,7 @@ module Input = struct
     t.seq <- seq;
     return ()
 end
+*)
 
 let complete op fd buf =
   let ofs = buf.Cstruct.off in
@@ -76,6 +80,7 @@ let complete op fd buf =
   then fail End_of_file
   else return ()
 
+(*
 module Output = struct
   type t = {
     fd: Lwt_unix.file_descr;
@@ -101,19 +106,24 @@ module Output = struct
     t.seq <- seq;
     return ()
 end
+*)
 
 (* Individual connections *)
 type connection = {
   fd: Lwt_unix.file_descr;
   sockaddr: Lwt_unix.sockaddr;
+  read_buffer: Cstruct.t;
+  write_buffer: Cstruct.t;
+  (*
   input: Input.t;
   output: Output.t;
+*)
 }
 
 let alloc (fd, sockaddr) =
-  let input = Input.make fd 4096 in
-  let output = Output.make fd 4096 in
-  return { fd; sockaddr; input; output }
+  let read_buffer = Cstruct.create (Protocol.Header.sizeof + Protocol.xenstore_payload_max) in
+  let write_buffer = Cstruct.create (Protocol.Header.sizeof + Protocol.xenstore_payload_max) in
+  return { fd; sockaddr; read_buffer; write_buffer }
 
 let create () =
   let sockaddr = Lwt_unix.ADDR_UNIX(!xenstored_socket) in
@@ -133,7 +143,7 @@ let create () =
 
 let destroy { fd } = Lwt_unix.close fd
 
-
+(*
 module Reader = struct
   type t = connection
   let next t = Input.next t.input
@@ -184,6 +194,7 @@ module PBuffer = struct
     then return (Some (Hashtbl.find table handle))
     else return None
 end
+*)
 
 let read { fd } = complete Lwt_bytes.read fd
 let write { fd } = complete Lwt_bytes.write fd
@@ -236,6 +247,36 @@ let rec accept_forever fd process =
   lwt conns, _ (*exn_option*) = Lwt_unix.accept_n fd 16 in
   let (_: unit Lwt.t list) = List.map (fun x -> alloc x >>= process) conns in
   accept_forever fd process
+
+type offset = unit with sexp
+
+let get_read_offset _ = return ()
+let get_write_offset _ = return ()
+
+let flush _ _ = return ()
+
+let enqueue t response =
+  let reply_buf = t.write_buffer in
+  let payload_buf = Cstruct.shift reply_buf Protocol.Header.sizeof in
+  let next = Protocol.Response.marshal response payload_buf in
+  let length = next.Cstruct.off - payload_buf.Cstruct.off in
+  (* XXX: where did the tid and rid go? *)
+  let hdr = { Protocol.Header.tid = 0l; rid = 0l; ty = Protocol.Response.get_ty response; len = length} in
+  ignore (Protocol.Header.marshal hdr reply_buf);
+  write t (Cstruct.sub t.write_buffer 0 (Protocol.Header.sizeof + length))
+
+let recv t _ =
+  let hdr = Cstruct.sub t.read_buffer 0 Protocol.Header.sizeof in
+  read t hdr >>= fun () ->
+  match Protocol.Header.unmarshal hdr with
+  | `Error x -> return ((), `Error x)
+  | `Ok x ->
+    let payload = Cstruct.sub t.read_buffer Protocol.Header.sizeof x.Protocol.Header.len in
+    read t payload >>= fun () ->
+    begin match Protocol.Request.unmarshal x payload with
+    | `Error y -> return ((), `Error y)
+    | `Ok y -> return ((), `Ok (x, y))
+    end
 
 module Introspect = struct
   let read { fd } = function
