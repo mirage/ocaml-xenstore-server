@@ -59,6 +59,15 @@ module Make = functor(T: S.TRANSPORT) -> struct
     end in
     (module Interface: Tree.S)
 
+  let rec ls_lR channel path =
+    let keys = T.Introspect.ls channel path in
+    List.concat (List.map (fun k ->
+      let path' = path @ [ k ] in
+      match T.Introspect.read channel path' with
+      | None -> ls_lR channel path'
+      | Some v -> (path', v) :: (ls_lR channel path')
+    ) keys)
+
   module PEffects = PRef.Make(struct type t = side_effects with sexp end)
 
   (* We store the next whole packet to transmit in this persistent buffer.
@@ -101,7 +110,11 @@ module Make = functor(T: S.TRANSPORT) -> struct
 
     (* XXX: write the input, output handles to the store *)
 
-    Database.persist Transaction.(effects1 ++ effects2) >>= fun () ->
+    let origin = Printf.sprintf "Accepted connection from domain %d over %s\n\nInitial parameters:\n%s"
+      dom (match Uri.scheme address with None -> "unknown protocol" | Some x -> x)
+      (String.concat "\n" (List.map (fun (path, v) -> Printf.sprintf "  %s: %s" (String.concat "/" path) v) (ls_lR t []))) in
+
+    Database.persist ~origin Transaction.(effects1 ++ effects2) >>= fun () ->
 
     (* Flush any pending output to the channel. This function can suffer a crash and
        restart at any point. On exit, the output buffer is invalid and the whole
