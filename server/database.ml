@@ -79,16 +79,16 @@ let initialise = function
     Lwt_list.iter_s
       (function
         | Store.Write(path, contents) ->
-          Printf.fprintf stderr "+ %s\n%!" (Protocol.Path.to_string path);
+          debug "+ %s %s" (match origin with None -> "" | Some x -> x) (Protocol.Path.to_string path);
           (try_lwt
             DB.View.update v (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents))
-          with e -> (Printf.fprintf stderr "ERR %s\n%!" (Printexc.to_string e)); return ())
+          with e -> (error "%s" (Printexc.to_string e)); return ())
         | Store.Rm path ->
-          Printf.fprintf stderr "- %s\n%!" (Protocol.Path.to_string path);
+          debug "- %s %s" (match origin with None -> "" | Some x -> x) (Protocol.Path.to_string path);
           (try_lwt
             DB.View.remove v (dir_of_filename path) >>= fun () ->
             DB.View.remove v (value_of_filename path)
-          with e -> (Printf.fprintf stderr "ERR %s\n%!" (Printexc.to_string e)); return ())
+          with e -> (error "%s" (Printexc.to_string e)); return ())
       ) us >>= fun () ->
     let origin = match origin with
     | None -> None
