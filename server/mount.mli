@@ -17,7 +17,7 @@ val mount: ?origin:string -> Xenstore.Protocol.Path.t -> (module Tree.S) -> unit
     at the given [mountpoint] path such that accessing paths for which
     [mountpoint] is a prefix, are performed within [implementation] *)
 
-val unmount: ?origin:string -> Xenstore.Protocol.Path.t -> unit Lwt.t
+val unmount: ?origin:string -> Xenstore.Protocol.Path.t -> Transaction.side_effects Lwt.t
 (** [unmount mountpoint] removes any attached implementation from
     [mountpoint] and deletes [mountpoint] if it is now empty. *)
 

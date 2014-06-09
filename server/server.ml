@@ -292,7 +292,7 @@ module Make = functor(T: S.TRANSPORT) -> struct
           Printf.sprintf "Resynchronising state for connection %d domain %d"
           (Connection.index c) dom in
         Database.persist ~origin side_effects >>= fun () ->
-        
+
         (* Second transmit the response packet *)
         flush r.next_write_ofs >>= fun () ->
         Lwt_mutex.unlock write_m;
@@ -334,11 +334,14 @@ module Make = functor(T: S.TRANSPORT) -> struct
 			loop ()
 		with e ->
 			Lwt.cancel background_watch_event_flusher;
-      Mount.unmount connection_path >>= fun () ->
-			Connection.destroy address >>= fun effects1 ->
-      PEffects.destroy peffects >>= fun effects2 ->
-      Quota.remove dom >>= fun effects3 ->
-      Database.persist Transaction.(effects1 ++ effects2 ++ effects3) >>= fun () ->
+      Mount.unmount connection_path >>= fun e1 ->
+			Connection.destroy address >>= fun e2 ->
+      PEffects.destroy peffects >>= fun e3 ->
+      Quota.remove dom >>= fun e4 ->
+      let origin =
+        Printf.sprintf "Closing connection %d domain %d\n\nException was: %s"
+          (Connection.index c) dom (Printexc.to_string e) in
+      Database.persist ~origin Transaction.(e1 ++ e2 ++ e3 ++ e4) >>= fun () ->
       T.destroy t
 
 	let serve_forever persistence =

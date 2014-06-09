@@ -95,12 +95,12 @@ let mount ?origin path implementation =
 let unmount ?origin path =
   let key = Path.to_string_list path in
   if not(Trie.mem !mounts key)
-  then return ()
+  then return (Transaction.no_side_effects())
   else begin
     mounts := Trie.unset !mounts key;
     Database.store >>= fun store ->
     let t = Transaction.make Transaction.none store in
     let ls = Transaction.ls t (Perms.of_domain 0) path in
     if ls = [] then Transaction.rm t (Perms.of_domain 0) path;
-    Database.persist ?origin (Transaction.get_side_effects t)
+    return (Transaction.get_side_effects t)
   end
