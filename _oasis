@@ -21,7 +21,7 @@ Library xenstored
   Path:               server
   Findlibname:        xenstored
   Modules:            Logging, PRef, PSet, PMap, PQueue, Logging_interface, Connection, Call, Trie, Symbol, Tree, Limits, Quota, Quota_interface, Perms, Node, Store, Mount, Database, Transaction, Server, Domain, Introduce, Heap_debug_interface
-  BuildDepends:       lwt, xenstore, irmin, irmin.backend, irmin.backend.fs, git, git.fs, sexplib
+  BuildDepends:       lwt, xenstore, irmin, irmin.backend, irmin.unix, git, sexplib
 
 # For backwards compat
 Library xenstore_client

@@ -46,13 +46,11 @@ let initialise = function
   Lwt.wakeup store_wakener s;
   return ()
 | S.Git filename ->
-  let module Config = struct
+  let open Irmin_unix in
+  let module Git = IrminGit.FS(struct
     let root = Some filename
-    module Store = Git_fs
     let bare = true
-    let disk = true
-  end in
-  let module Git = IrminGit.Make(Config) in
+  end) in
   let module DB = Git.Make(IrminKey.SHA1)(IrminContents.String)(IrminTag.String) in
   DB.create () >>= fun db ->
 
