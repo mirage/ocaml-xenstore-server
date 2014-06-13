@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: f268f5ee7515309943815004d68a5765)
+# DO NOT EDIT (digest: 86259448c5a9f54834f47d4db1183636)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -53,10 +53,9 @@
 <server/*.ml{,i}>: pkg_cstruct
 <server/*.ml{,i}>: pkg_cstruct.syntax
 <server/*.ml{,i}>: pkg_git
-<server/*.ml{,i}>: pkg_git.fs
 <server/*.ml{,i}>: pkg_irmin
 <server/*.ml{,i}>: pkg_irmin.backend
-<server/*.ml{,i}>: pkg_irmin.backend.fs
+<server/*.ml{,i}>: pkg_irmin.unix
 <server/*.ml{,i}>: pkg_lwt
 <server/*.ml{,i}>: pkg_sexplib
 <server/*.ml{,i}>: pkg_uri
@@ -94,10 +93,9 @@
 <server_test/server_test.{native,byte}>: pkg_cstruct
 <server_test/server_test.{native,byte}>: pkg_cstruct.syntax
 <server_test/server_test.{native,byte}>: pkg_git
-<server_test/server_test.{native,byte}>: pkg_git.fs
 <server_test/server_test.{native,byte}>: pkg_irmin
 <server_test/server_test.{native,byte}>: pkg_irmin.backend
-<server_test/server_test.{native,byte}>: pkg_irmin.backend.fs
+<server_test/server_test.{native,byte}>: pkg_irmin.unix
 <server_test/server_test.{native,byte}>: pkg_lwt
 <server_test/server_test.{native,byte}>: pkg_oUnit
 <server_test/server_test.{native,byte}>: pkg_sexplib
@@ -109,10 +107,9 @@
 <server_test/binary.{native,byte}>: pkg_cstruct
 <server_test/binary.{native,byte}>: pkg_cstruct.syntax
 <server_test/binary.{native,byte}>: pkg_git
-<server_test/binary.{native,byte}>: pkg_git.fs
 <server_test/binary.{native,byte}>: pkg_irmin
 <server_test/binary.{native,byte}>: pkg_irmin.backend
-<server_test/binary.{native,byte}>: pkg_irmin.backend.fs
+<server_test/binary.{native,byte}>: pkg_irmin.unix
 <server_test/binary.{native,byte}>: pkg_lwt
 <server_test/binary.{native,byte}>: pkg_lwt.unix
 <server_test/binary.{native,byte}>: pkg_oUnit
@@ -124,10 +121,9 @@
 <server_test/*.ml{,i}>: pkg_cstruct
 <server_test/*.ml{,i}>: pkg_cstruct.syntax
 <server_test/*.ml{,i}>: pkg_git
-<server_test/*.ml{,i}>: pkg_git.fs
 <server_test/*.ml{,i}>: pkg_irmin
 <server_test/*.ml{,i}>: pkg_irmin.backend
-<server_test/*.ml{,i}>: pkg_irmin.backend.fs
+<server_test/*.ml{,i}>: pkg_irmin.unix
 <server_test/*.ml{,i}>: pkg_lwt
 <server_test/*.ml{,i}>: pkg_lwt.unix
 <server_test/*.ml{,i}>: pkg_oUnit
@@ -148,12 +144,11 @@
 <userspace/main.{native,byte}>: pkg_cstruct
 <userspace/main.{native,byte}>: pkg_cstruct.syntax
 <userspace/main.{native,byte}>: pkg_git
-<userspace/main.{native,byte}>: pkg_git.fs
 <userspace/main.{native,byte}>: pkg_io-page
 <userspace/main.{native,byte}>: pkg_io-page.unix
 <userspace/main.{native,byte}>: pkg_irmin
 <userspace/main.{native,byte}>: pkg_irmin.backend
-<userspace/main.{native,byte}>: pkg_irmin.backend.fs
+<userspace/main.{native,byte}>: pkg_irmin.unix
 <userspace/main.{native,byte}>: pkg_lwt
 <userspace/main.{native,byte}>: pkg_lwt.unix
 <userspace/main.{native,byte}>: pkg_sexplib
@@ -214,12 +209,11 @@
 <userspace/dbgring.{native,byte}>: pkg_cstruct
 <userspace/dbgring.{native,byte}>: pkg_cstruct.syntax
 <userspace/dbgring.{native,byte}>: pkg_git
-<userspace/dbgring.{native,byte}>: pkg_git.fs
 <userspace/dbgring.{native,byte}>: pkg_io-page
 <userspace/dbgring.{native,byte}>: pkg_io-page.unix
 <userspace/dbgring.{native,byte}>: pkg_irmin
 <userspace/dbgring.{native,byte}>: pkg_irmin.backend
-<userspace/dbgring.{native,byte}>: pkg_irmin.backend.fs
+<userspace/dbgring.{native,byte}>: pkg_irmin.unix
 <userspace/dbgring.{native,byte}>: pkg_lwt
 <userspace/dbgring.{native,byte}>: pkg_lwt.unix
 <userspace/dbgring.{native,byte}>: pkg_sexplib
@@ -236,12 +230,11 @@
 <userspace/*.ml{,i}>: pkg_cstruct
 <userspace/*.ml{,i}>: pkg_cstruct.syntax
 <userspace/*.ml{,i}>: pkg_git
-<userspace/*.ml{,i}>: pkg_git.fs
 <userspace/*.ml{,i}>: pkg_io-page
 <userspace/*.ml{,i}>: pkg_io-page.unix
 <userspace/*.ml{,i}>: pkg_irmin
 <userspace/*.ml{,i}>: pkg_irmin.backend
-<userspace/*.ml{,i}>: pkg_irmin.backend.fs
+<userspace/*.ml{,i}>: pkg_irmin.unix
 <userspace/*.ml{,i}>: pkg_lwt
 <userspace/*.ml{,i}>: pkg_lwt.unix
 <userspace/*.ml{,i}>: pkg_sexplib
@@ -258,12 +251,11 @@
 "userspace/domains_stubs.c": pkg_cstruct
 "userspace/domains_stubs.c": pkg_cstruct.syntax
 "userspace/domains_stubs.c": pkg_git
-"userspace/domains_stubs.c": pkg_git.fs
 "userspace/domains_stubs.c": pkg_io-page
 "userspace/domains_stubs.c": pkg_io-page.unix
 "userspace/domains_stubs.c": pkg_irmin
 "userspace/domains_stubs.c": pkg_irmin.backend
-"userspace/domains_stubs.c": pkg_irmin.backend.fs
+"userspace/domains_stubs.c": pkg_irmin.unix
 "userspace/domains_stubs.c": pkg_lwt
 "userspace/domains_stubs.c": pkg_lwt.unix
 "userspace/domains_stubs.c": pkg_sexplib
