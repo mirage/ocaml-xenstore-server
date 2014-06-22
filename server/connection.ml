@@ -14,6 +14,7 @@
 open Sexplib.Std
 open Lwt
 open Xenstore
+open Persistence
 
 let debug fmt = Logging.debug "connection" fmt
 let info  fmt = Logging.info  "connection" fmt
@@ -22,6 +23,19 @@ let error fmt = Logging.debug "connection" fmt
 module Watch = struct
   type t = Protocol.Name.t * string with sexp
 end
+
+module Make(V: VIEW) = struct
+  type t = unit
+
+  let create v (uri, dom) =
+    return ()
+
+  let index _ = -1
+
+  let destroy v t =
+    return ()
+end
+(*
 module Watch_events = PQueue.Make(Watch)
 module Watch_registrations = PSet.Make(Watch)
 
@@ -356,3 +370,4 @@ module Introspect = struct
 			list_connection t perms c rest
 end
 let _ = Mount.mount (Protocol.Path.of_string "/tool/xenstored/connection") (module Introspect: Tree.S)
+*)

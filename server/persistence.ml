@@ -11,8 +11,27 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *)
+open Sexplib
+open Lwt
 open Xenstore
+open Protocol
 
-module Make(T: S.SERVER)(V: Persistence.VIEW) : sig
-  val serve_forever: unit -> unit Lwt.t
+let ( |> ) a b = b a
+let ( ++ ) f g x = f (g x)
+
+let debug fmt = Logging.debug "persistence" fmt
+let error fmt = Logging.error "persistence" fmt
+
+module type VIEW = sig
+  type t
+
+  val create: unit -> t Lwt.t
+
+  val read: t -> Protocol.Path.t -> Node.contents Lwt.t
+
+  val write: t -> Protocol.Path.t -> Node.contents -> unit Lwt.t
+
+  val rm: t -> Protocol.Path.t -> unit Lwt.t
+
+  val merge: t -> string -> unit Lwt.t
 end

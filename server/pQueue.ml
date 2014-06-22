@@ -19,18 +19,18 @@ module type S = sig
   type t
   (** A persistent queue *)
 
-  val create: string list -> (t * Transaction.side_effects) Lwt.t
+  val create: string list -> (t * 'view Transaction.side_effects) Lwt.t
   (** [create name]: loads the queue at [name] *)
 
   val length: t -> int Lwt.t
   (** [length t]: the number of elements in queue *)
 
-  val add: v -> t -> Transaction.side_effects Lwt.t
+  val add: v -> t -> 'view Transaction.side_effects Lwt.t
   (** [add elem t]: adds the element [elem] to the queue [t].
       When the thread completes the element will be in the persistent
       store and will survive a crash. *)
 
-  val clear: t -> Transaction.side_effects Lwt.t
+  val clear: t -> 'view Transaction.side_effects Lwt.t
   (** [clear t]: deletes all elements in queue [t] *)
 
   val fold: ('b -> v -> 'b) -> 'b -> t -> 'b Lwt.t

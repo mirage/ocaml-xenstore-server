@@ -11,10 +11,12 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *)
+(*
 open Sexplib
 open Lwt
 open Xenstore
 open Protocol
+open Persistence
 
 let ( |> ) a b = b a
 let ( ++ ) f g x = f (g x)
@@ -22,33 +24,9 @@ let ( ++ ) f g x = f (g x)
 let debug fmt = Logging.debug "database" fmt
 let error fmt = Logging.error "database" fmt
 
-module type VIEW = sig
-  type t
-
-  val create: unit -> t Lwt.t
-
-  val read: t -> Protocol.Path.t -> Node.contents Lwt.t
-
-  val write: t -> Protocol.Path.t -> Node.contents -> unit Lwt.t
-
-  val rm: t -> Protocol.Path.t -> unit Lwt.t
-
-  val merge: t -> string -> unit Lwt.t
-end
-
-let view, view_wakener = Lwt.task ()
-
 let make_view = function
   | S.NoPersistence ->
-    let module M = struct
-      type t = unit
-      let create () = return ()
-      let read () _ = fail (Failure "not implemented")
-      let write () _ _ = return ()
-      let rm () _ = fail (Failure "not implemented")
-      let merge () _ = fail (Failure "not implemented")
-    end in
-    return (module M: VIEW)
+    return (module NoPersistence: VIEW)
   | S.Git filename ->
     let open Irmin_unix in
     let module Git = IrminGit.FS(struct
@@ -135,3 +113,4 @@ let initialise kind =
   Lwt.wakeup persister_wakener p;
 
   return ()
+*)

@@ -1,14 +1,14 @@
 open Xenstore
 
 module type S = sig
-	val exists: Transaction.t -> Perms.t -> Protocol.Path.t -> bool
-	val mkdir: Transaction.t -> Limits.t option -> int -> Perms.t -> Protocol.Path.t -> unit
-	val read: Transaction.t -> Perms.t -> Protocol.Path.t -> string
-	val write: Transaction.t -> Limits.t option -> int -> Perms.t -> Protocol.Path.t -> string -> unit
-	val ls: Transaction.t -> Perms.t -> Protocol.Path.t -> string list
-	val rm: Transaction.t -> Perms.t -> Protocol.Path.t -> unit
-	val getperms: Transaction.t -> Perms.t -> Protocol.Path.t -> Protocol.ACL.t
-	val setperms: Transaction.t -> Perms.t -> Protocol.Path.t -> Protocol.ACL.t -> unit
+	val exists: 'view Transaction.t -> Perms.t -> Protocol.Path.t -> bool
+	val mkdir: 'view Transaction.t -> Limits.t option -> int -> Perms.t -> Protocol.Path.t -> unit
+	val read: 'view Transaction.t -> Perms.t -> Protocol.Path.t -> string
+	val write: 'view Transaction.t -> Limits.t option -> int -> Perms.t -> Protocol.Path.t -> string -> unit
+	val ls: 'view Transaction.t -> Perms.t -> Protocol.Path.t -> string list
+	val rm: 'view Transaction.t -> Perms.t -> Protocol.Path.t -> unit
+	val getperms: 'view Transaction.t -> Perms.t -> Protocol.Path.t -> Protocol.ACL.t
+	val setperms: 'view Transaction.t -> Perms.t -> Protocol.Path.t -> Protocol.ACL.t -> unit
 end
 
 exception Unsupported

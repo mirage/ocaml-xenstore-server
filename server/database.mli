@@ -11,26 +11,13 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *)
-
+(*
 open Xenstore
-
-module type VIEW = sig
-  type t
-
-  val create: unit -> t Lwt.t
-
-  val read: t -> Protocol.Path.t -> Node.contents Lwt.t
-
-  val write: t -> Protocol.Path.t -> Node.contents -> unit Lwt.t
-
-  val rm: t -> Protocol.Path.t -> unit Lwt.t
-
-  val merge: t -> string -> unit Lwt.t
-end
+open Persistence
 
 val view: (module VIEW) Lwt.t
 
-val persist: ?origin:string -> Transaction.side_effects -> unit Lwt.t
+val persist: ?origin:string -> 'view Transaction.side_effects -> unit Lwt.t
 (** Persists the given side-effects. Make sure you start exactly one
     persistence thread *)
 
@@ -43,6 +30,7 @@ val initialise: S.persistence -> unit Lwt.t
     If [persistence-policy] is [Git path] then all updates are
     stored in a git database located at [path] *)
 
-val immediate: ('a * Transaction.side_effects) Lwt.t -> 'a Lwt.t
+val immediate: ('a * 'view Transaction.side_effects) Lwt.t -> 'a Lwt.t
 (** [immediate t] persists the side effects associated with [t] immediately
     and returns the value *)
+*)

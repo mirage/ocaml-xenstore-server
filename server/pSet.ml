@@ -19,7 +19,7 @@ module type S = sig
   type t
   (** A persistent set of values of type v *)
 
-  val create: string list -> (t * Transaction.side_effects) Lwt.t
+  val create: string list -> (t * 'view Transaction.side_effects) Lwt.t
   (** [create name]: loads the set at [name] *)
 
   val name: t -> string list
@@ -28,12 +28,12 @@ module type S = sig
   val cardinal: t -> int Lwt.t
   (** [cardinal t]: the number of elements in the set *)
 
-  val add: v -> t -> Transaction.side_effects Lwt.t
+  val add: v -> t -> 'view Transaction.side_effects Lwt.t
   (** [add v t]: adds [v] to set [t].
       When the thread completes the update will be in the persistent
       store and will survive a crash. *)
 
-  val remove: v -> t -> Transaction.side_effects Lwt.t
+  val remove: v -> t -> 'view Transaction.side_effects Lwt.t
   (** [remove v t]: removes [v] from the set [t].
       When the thread completes the update will be in the persistent
       store and will survive a crash. *)
@@ -41,7 +41,7 @@ module type S = sig
   val mem: v-> t -> bool Lwt.t
   (** [mem v t]: true if [v] is in [t], false otherwise *)
 
-  val clear: t -> Transaction.side_effects Lwt.t
+  val clear: t -> 'view Transaction.side_effects Lwt.t
   (** [clear t]: deletes all bindings from map [t] *)
 
   val fold: ('b -> v -> 'b) -> 'b -> t -> 'b Lwt.t
@@ -68,7 +68,7 @@ module Make(T: S.SEXPABLE) = struct
 
   let recreate t =
     Database.store >>= fun db ->
-    let tr = Transaction.make Transaction.none db in
+    Transaction.make Transaction.none db >>= fun tr ->
     let path = Protocol.Path.of_string_list t.name in
     if not(Transaction.exists tr (Perms.of_domain 0) path) then Transaction.mkdir tr None 0 (Perms.of_domain 0) path;
     return (Transaction.get_side_effects tr)
@@ -78,7 +78,7 @@ module Make(T: S.SEXPABLE) = struct
     recreate t >>= fun effects ->
     Database.persist effects >>= fun () ->
     Database.store >>= fun db ->
-    let tr = Transaction.make Transaction.none db in
+    Transaction.make Transaction.none db >>= fun tr ->
     let path = Protocol.Path.of_string_list t.name in
     let ls = Transaction.ls tr (Perms.of_domain 0) path in
     return (List.fold_left (fun acc k ->
@@ -108,11 +108,12 @@ module Make(T: S.SEXPABLE) = struct
     Lwt_mutex.with_lock t.m
       (fun () ->
         mem v t >>= function
-        | true -> return (Transaction.no_side_effects ())
+        | true ->
+          Transaction.no_side_effects ()
         | false ->
           fold (fun acc k _ -> try max acc (int_of_string k) with _ -> acc) (-1) t >>= fun max_id ->
           Database.store >>= fun db ->
-          let tr = Transaction.make Transaction.none db in
+          Transaction.make Transaction.none db >>= fun tr ->
           Transaction.write tr None 0 (Perms.of_domain 0) (Protocol.Path.of_string_list (t.name @ [ string_of_int (max_id + 1) ])) (Sexp.to_string (T.sexp_of_t v));
           return (Transaction.get_side_effects tr)
       )
@@ -121,10 +122,11 @@ module Make(T: S.SEXPABLE) = struct
     Lwt_mutex.with_lock t.m
       (fun () ->
         fold (fun acc k v' -> if v' = v then Some k else None) None t >>= function
-        | None -> return (Transaction.no_side_effects())
+        | None ->
+          Transaction.no_side_effects ()
         | Some key ->
           Database.store >>= fun db ->
-          let tr = Transaction.make Transaction.none db in
+          Transaction.make Transaction.none db >>= fun tr ->
           Transaction.rm tr (Perms.of_domain 0) (Protocol.Path.of_string_list (t.name @ [ key ]));
           return (Transaction.get_side_effects tr)
       )
@@ -133,7 +135,7 @@ module Make(T: S.SEXPABLE) = struct
     Lwt_mutex.with_lock t.m
       (fun () ->
         Database.store >>= fun db ->
-        let tr = Transaction.make Transaction.none db in
+        Transaction.make Transaction.none db >>= fun tr ->
         let path = Protocol.Path.of_string_list t.name in
         if Transaction.exists tr (Perms.of_domain 0) path then Transaction.rm tr (Perms.of_domain 0) path;
         Transaction.mkdir tr None 0 (Perms.of_domain 0) path;

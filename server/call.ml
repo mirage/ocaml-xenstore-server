@@ -26,18 +26,19 @@ exception Parse_failure
 
 exception Transaction_again
 
-  (* Perform a 'simple' operation (not a Transaction_start or Transaction_end)
+(* Perform a 'simple' operation (not a Transaction_start or Transaction_end)
    and create a response. *)
-let op_exn store limits perm c t (payload: Request.t) : Response.t * Transaction.side_effects =
+let op_exn store limits perm c t (payload: Request.t) : (Response.t * 'view Transaction.side_effects) Lwt.t=
 	let open Request in
-        (* used when an operation has side-effects which should be visible
-           immediately (if not in a transaction context) or upon commit (if
-           in a transaction context) *)
-        let has_side_effects () =
-                if Transaction.get_immediate t
-                then Transaction.get_side_effects t
-                else Transaction.no_side_effects () in
-	match payload with
+  (* used when an operation has side-effects which should be visible
+     immediately (if not in a transaction context) or upon commit (if
+     in a transaction context) *)
+	Transaction.no_side_effects () >>= fun no_side_effects ->
+  let has_side_effects () =
+    if Transaction.get_immediate t
+    then Transaction.get_side_effects t
+    else no_side_effects in
+	return (match payload with
 		| Transaction_start
 		| Transaction_end _
 		| Watch(_, _)
@@ -51,20 +52,20 @@ let op_exn store limits perm c t (payload: Request.t) : Response.t * Transaction
 		| Isintroduced _ -> assert false
 		| Getdomainpath domid ->
 			let v = Store.getdomainpath domid |> Protocol.Name.to_string in
-			Response.Getdomainpath v, Transaction.no_side_effects ()
+			Response.Getdomainpath v, no_side_effects
 		| PathOp(path, op) ->
 			let path = Protocol.Name.(to_path (resolve (of_string path) (Connection.domainpath c))) in
                         let module Impl = Mount.Tree in
 			begin match op with
 			| Read ->
 				let v = Impl.read t perm path in
-				Response.Read v, Transaction.no_side_effects ()
+				Response.Read v, no_side_effects
 			| Directory ->
 				let entries = Impl.ls t perm path in
-				Response.Directory entries, Transaction.no_side_effects ()
+				Response.Directory entries, no_side_effects
 			| Getperms ->
 				let v = Impl.getperms t perm path in
-				Response.Getperms v, Transaction.no_side_effects ()
+				Response.Getperms v, no_side_effects
 			| Write value ->
 				Impl.write t limits (Connection.domid c) perm path value;
 				Response.Write, has_side_effects ()
@@ -76,9 +77,9 @@ let op_exn store limits perm c t (payload: Request.t) : Response.t * Transaction
 				Response.Rm, has_side_effects ()
 			| Setperms perms ->
 				Impl.setperms t perm path perms;
-				Response.Setperms, Transaction.no_side_effects ()
-			end
-
+				Response.Setperms, no_side_effects
+			end)
+(*
 (* Replay a stored transaction against a fresh store, check the responses are
    all equivalent: if so, commit the transaction. Otherwise send the abort to
    the client. *)
@@ -102,6 +103,7 @@ let transaction_replay store limits perm c t =
 		error "transaction_replay caught: %s" (Printexc.to_string e);
                 Connection.unregister_transaction c tid;
                 raise Transaction_again
+*)
 
 let gc store =
   if Symbol.created () > 1000 || Symbol.used () > 20000 then begin
@@ -113,24 +115,22 @@ let gc store =
   end
 
 (* Compute a reply and set of side effects, or fail *)
-let reply_or_fail store limits perm c hdr (request: Request.t) : (Response.t * Transaction.side_effects) Lwt.t =
-	let tid = hdr.Header.tid in
-	let t =
-		if tid = Transaction.none
-		then Transaction.make tid store
-		else Connection.get_transaction c tid in
-
-        ( Logging_interface.request request >>= function
-          | true ->
-                debug "<-  %s %ld %s" (Uri.to_string (Connection.address c)) tid (Sexp.to_string (Request.sexp_of_t request));
-                return ()
-          | false ->
-                return () ) >>= fun () ->
-
+let reply_or_fail store limits perm c hdr (request: Request.t) : (Response.t * 'view Transaction.side_effects) Lwt.t =
+  let tid = hdr.Header.tid in
+	( if tid = Transaction.none
+    then Transaction.make tid store
+    else return (Connection.get_transaction c tid) ) >>= fun t ->
+  ( Logging_interface.request request >>= function
+    | true ->
+      debug "<-  %s %ld %s" (Uri.to_string (Connection.address c)) tid (Sexp.to_string (Request.sexp_of_t request));
+      return ()
+    | false ->
+      return () ) >>= fun () ->
+  Transaction.no_side_effects () >>= fun nothing ->
 	match request with
 		| Request.Transaction_start ->
       if tid <> Transaction.none
-      then return (Response.Error "EBUSY", Transaction.no_side_effects ())
+      then return (Response.Error "EBUSY", nothing)
       else begin
         Connection.register_transaction limits c store >>= fun (tid, side_effects) ->
 			  return (Response.Transaction_start tid, side_effects)
@@ -138,43 +138,41 @@ let reply_or_fail store limits perm c hdr (request: Request.t) : (Response.t * T
 		| Request.Transaction_end commit ->
 			Connection.unregister_transaction c tid;
 			if commit then begin
-                                try
-                                        let side_effects = transaction_replay store limits perm c t in
-				        return (Response.Transaction_end, side_effects)
-                                with e -> fail e
+			  error "Transaction commit not implemented";
+				fail (Failure "Transaction_end")
 			end else begin
-				return (Response.Transaction_end, Transaction.no_side_effects ())
+				return (Response.Transaction_end, nothing)
 			end
 		| Request.Watch(path, token) ->
-                        return (Response.Watch, Transaction.( { no_side_effects () with watch = [ Protocol.Name.of_string path, token ] } ))
+      return (Response.Watch, Transaction.( { nothing with watch = [ Protocol.Name.of_string path, token ] } ))
 		| Request.Unwatch(path, token) ->
-                        return (Response.Unwatch, Transaction.( { no_side_effects () with unwatch = [ Protocol.Name.of_string path, token ] } ))
+      return (Response.Unwatch, Transaction.( { nothing with unwatch = [ Protocol.Name.of_string path, token ] } ))
 		| Request.Debug cmd ->
-                        (try Perms.has perm Perms.DEBUG; return () with e -> fail e) >>= fun () ->
-                        return (Response.Debug [], Transaction.no_side_effects ())
+      (try Perms.has perm Perms.DEBUG; return () with e -> fail e) >>= fun () ->
+       return (Response.Debug [], nothing)
 		| Request.Introduce(domid, mfn, remote_port) ->
-                        (try
-		        	Perms.has perm Perms.INTRODUCE;
-                                let address = { Domain.domid; mfn; remote_port } in
-                                let side_effects = {
-                                  Transaction.no_side_effects () with
-                                  Transaction.domains = [ address ];
-                                  watches = [ Op.Write, Protocol.Name.(Predefined IntroduceDomain) ]
-                                } in
-			        return (Response.Introduce, side_effects)
-                        with e -> fail e)
-		| Request.Resume(domid) ->
-                        (try
-			        Perms.has perm Perms.RESUME;
-			        (* register domain *)
-			        return (Response.Resume, Transaction.no_side_effects ())
-                        with e -> fail e)
-		| Request.Release(domid) ->
-                        (try Perms.has perm Perms.RELEASE; return () with e -> fail e) >>= fun () ->
-			(* unregister domain *)
+      (try
+        Perms.has perm Perms.INTRODUCE;
+        let address = { Domain.domid; mfn; remote_port } in
+        let side_effects = {
+          nothing with
+          Transaction.domains = [ address ];
+          watches = [ Op.Write, Protocol.Name.(Predefined IntroduceDomain) ]
+        } in
+        return (Response.Introduce, side_effects)
+      with e -> fail e)
+    | Request.Resume(domid) ->
+      (try
+        Perms.has perm Perms.RESUME;
+        (* register domain *)
+        return (Response.Resume, nothing)
+      with e -> fail e)
+    | Request.Release(domid) ->
+      (try Perms.has perm Perms.RELEASE; return () with e -> fail e) >>= fun () ->
+      (* unregister domain *)
 			Connection.fire limits (Op.Write, Protocol.Name.(Predefined ReleaseDomain)) >>= fun effects ->
       Database.persist effects >>= fun () ->
-			return (Response.Release, Transaction.no_side_effects ())
+			return (Response.Release, nothing)
 		| Request.Set_target(mine, yours) ->
       (try Perms.has perm Perms.SET_TARGET; return () with e -> fail e) >>= fun () ->
       let cs = Hashtbl.fold (fun _ c acc ->
@@ -185,7 +183,7 @@ let reply_or_fail store limits perm c hdr (request: Request.t) : (Response.t * T
           PPerms.get (perm c) >>= fun (current, e1) ->
           PPerms.set (Perms.set_target current yours) (perm c) >>= fun e2 ->
           return Transaction.(side_effects ++ e1 ++ e2)
-      ) Transaction.(no_side_effects ()) cs >>= fun side_effects ->
+      ) nothing cs >>= fun side_effects ->
 			return (Response.Set_target, side_effects)
 		| Request.Restrict domid ->
       (try Perms.has perm Perms.RESTRICT; return () with e -> fail e) >>= fun () ->
@@ -194,7 +192,7 @@ let reply_or_fail store limits perm c hdr (request: Request.t) : (Response.t * T
 			return (Response.Restrict, Transaction.(e1 ++ e2))
 		| Request.Isintroduced domid ->
       (try Perms.has perm Perms.ISINTRODUCED; return () with e -> fail e) >>= fun () ->
-			return (Response.Isintroduced false, Transaction.no_side_effects ())
+			return (Response.Isintroduced false, nothing)
 		| op ->
       (try
         let reply, side_effects = op_exn store limits perm c t op in
@@ -211,7 +209,8 @@ let reply store limits perm c hdr request : (Response.t * Transaction.side_effec
       return (x, None))
     (fun e ->
       let default = Some (Printexc.to_string e) in
-      let reply code = Response.Error code, Transaction.no_side_effects () in
+			Transaction.no_side_effects () >>= fun no_side_effects ->
+      let reply code = Response.Error code, no_side_effects in
       match e with
       | Transaction_again                     -> return (reply "EAGAIN", default)
       | Limits.Limit_reached                  -> return (reply "EQUOTA", default)

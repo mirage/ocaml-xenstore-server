@@ -12,9 +12,9 @@
  * GNU Lesser General Public License for more details.
  *)
 
-val remove: int -> Transaction.side_effects Lwt.t
+val remove: int -> 'view Transaction.side_effects Lwt.t
 (** [remove domid] removes all domain-specific limit overrides *)
 
-val limits_of_domain: int -> (Limits.t * Transaction.side_effects) Lwt.t
+val limits_of_domain: int -> (Limits.t * 'view Transaction.side_effects) Lwt.t
 (** [limits_of_domain domid] returns the limits currently in force
     for domain [domid] *)

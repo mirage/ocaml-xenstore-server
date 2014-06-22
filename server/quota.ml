@@ -76,20 +76,21 @@ let limits_of_domain domid =
   maxwatch_overrides >>= fun maxwatch_overrides ->
   maxtransaction_overrides >>= fun maxtransaction_overrides ->
   PerDomain.mem domid maxent_overrides >>= fun b ->
+  Transaction.no_side_effects () >>= fun no_side_effects ->
   (if b then begin
     PerDomain.find domid maxent_overrides >>= fun x ->
-    return (x, Transaction.no_side_effects())
+    return (x, no_side_effects)
    end else PRef.Int.get maxent) >>= fun (number_of_entries, e1) ->
   PRef.Int.get maxsize >>= fun (entry_length, e2) ->
   PerDomain.mem domid maxwatch_overrides >>= fun b ->
   (if b then begin
     PerDomain.find domid maxwatch_overrides >>= fun x ->
-    return (x, Transaction.no_side_effects())
+    return (x, no_side_effects)
    end else PRef.Int.get maxwatch) >>= fun (number_of_registered_watches, e3) ->
   PerDomain.mem domid maxtransaction_overrides >>= fun b ->
   (if b then begin
     PerDomain.find domid maxtransaction_overrides >>= fun x ->
-    return (x, Transaction.no_side_effects())
+    return (x, no_side_effects)
    end else PRef.Int.get maxtransaction) >>= fun (number_of_active_transactions, e4) ->
   PRef.Int.get maxwatchevent >>= fun (number_of_queued_watch_events, e5) ->
   let t = { Limits.number_of_entries; entry_length; number_of_registered_watches; number_of_active_transactions; number_of_queued_watch_events } in

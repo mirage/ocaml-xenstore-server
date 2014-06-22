@@ -11,8 +11,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *)
+open Lwt
 open Xenstore
 open Domain
+
+(*
 
 let (stream: address Lwt_stream.t), introduce_fn = Lwt_stream.create ()
 
@@ -71,3 +74,8 @@ let _ =
   ls () >>= fun existing ->
   List.iter (fun x -> introduce_fn (Some x)) existing;
   return ()
+*)
+
+let introduce _ = fail (Failure "introduce")
+let forget _ = fail (Failure "forget")
+let stream, _ = Lwt_stream.create()

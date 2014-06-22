@@ -11,16 +11,20 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *)
-
+(*
 open Sexplib.Std
+open Lwt
 
 let debug fmt = Logging.debug "transaction" fmt
 open Xenstore
+open Persistence
 
 let none = 0l
 let test_eagain = ref false
 
-type side_effects = {
+type 'view side_effects = {
+  view: (module VIEW with type t = 'view);
+
         (* A log of all the store updates in this transaction. When the transaction
            is committed, these paths need to be committed to stable storage.
            The list is stored in reverse order for constant-{time,space} append. *)
@@ -35,11 +39,14 @@ type side_effects = {
         mutable watch: (Protocol.Name.t * string) list;
         (* A list of all the watches unregistered during the transaction *)
         mutable unwatch: (Protocol.Name.t * string) list;
-} with sexp
+} (*with sexp*)
 
-let no_side_effects () = { updates = []; watches = []; domains = []; watch = []; unwatch = [] }
+let no_side_effects () =
+  view >>= fun view ->
+  return { view; updates = []; watches = []; domains = []; watch = []; unwatch = [] }
 
 let merge a b = {
+  view = a.view;
   updates = a.updates @ b.updates;
   watches = a.watches @ b.watches;
   domains = a.domains @ b.domains;
@@ -55,14 +62,14 @@ let get_domains side_effects = List.rev side_effects.domains
 let get_watch   side_effects = List.rev side_effects.watch
 let get_unwatch side_effects = List.rev side_effects.unwatch
 
-type t = {
+type 'view t = {
   (* True if all side-effects are published immediately, false if we're
      in a throwaway transaction context. *)
   immediate: bool;
   id: int32;
   store: Store.t;
   (* Side-effects which should be generated when the transaction is committed. *)
-  side_effects: side_effects;
+  side_effects: 'view side_effects;
   (* A log of all the requests and responses during this transaction. When
      committing a transaction to a modified store, we replay the requests and
      abort the transaction if any of the responses would now be different. *)
@@ -70,19 +77,22 @@ type t = {
 }
 
 let make id store =
-	{
-                id; immediate = id = none;
+  no_side_effects () >>= fun side_effects ->
+	return {
+    id; immediate = id = none;
 		store = if id = none then store else Store.copy store;
-                side_effects = no_side_effects ();
+    side_effects;
 		operations = [];
 	}
 
-let take_snapshot store = {
-  id = none; immediate = false;
-  store = Store.copy store;
-  side_effects = no_side_effects ();
-  operations = [];
-}
+let take_snapshot store =
+  no_side_effects () >>= fun side_effects ->
+  return {
+    id = none; immediate = false;
+    store = Store.copy store;
+    side_effects;
+    operations = [];
+  }
 
 let get_id t = t.id
 let get_immediate t = t.immediate
@@ -135,3 +145,4 @@ let exists t perms path = Store.exists t.store path
 let ls t perm path = Store.ls t.store perm path
 let read t perm path = Store.read t.store perm path
 let getperms t perm path = Store.getperms t.store perm path
+*)

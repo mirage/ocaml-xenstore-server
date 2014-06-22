@@ -16,7 +16,7 @@ module Make(K: S.STRINGABLE)(V: S.SEXPABLE) : sig
   type t
   (** A persistent queue mapping stringable things to V.t *)
 
-  val create: string list -> (t * Transaction.side_effects) Lwt.t
+  val create: string list -> (t * 'view Transaction.side_effects) Lwt.t
   (** [create name]: loads the map at [name] *)
 
   val name: t -> string list
@@ -25,12 +25,12 @@ module Make(K: S.STRINGABLE)(V: S.SEXPABLE) : sig
   val cardinal: t -> int Lwt.t
   (** [cardinal t]: the number of bindings in the map *)
 
-  val add: K.t -> V.t -> t -> Transaction.side_effects Lwt.t
+  val add: K.t -> V.t -> t -> 'view Transaction.side_effects Lwt.t
   (** [add k v t]: binds [k] to [v] in the map [t].
       When the thread completes the update will be in the persistent
       store and will survive a crash. *)
 
-  val remove: K.t -> t -> Transaction.side_effects Lwt.t
+  val remove: K.t -> t -> 'view Transaction.side_effects Lwt.t
   (** [remove k t]: removes the binding [k] from [t] if it exists.
       If there is no binding then return ().
       When the thread completes the update will be in the persistent
@@ -42,7 +42,7 @@ module Make(K: S.STRINGABLE)(V: S.SEXPABLE) : sig
   val mem: K.t -> t -> bool Lwt.t
   (** [mem k t]: true if [k] is bound in [t], false otherwise *)
 
-  val clear: t -> Transaction.side_effects Lwt.t
+  val clear: t -> 'view Transaction.side_effects Lwt.t
   (** [clear t]: deletes all bindings from map [t] *)
 
   val fold: ('b -> K.t -> V.t -> 'b) -> 'b -> t -> 'b Lwt.t

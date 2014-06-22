@@ -19,21 +19,21 @@ module type S = sig
   type t
   (** A persistent reference cell holding values of type v *)
 
-  val create: string list -> v -> (t * Transaction.side_effects) Lwt.t
+  val create: string list -> v -> (t * 'view Transaction.side_effects) Lwt.t
   (** [create name default]: loads the reference cell at [name].
       If the cell doesn't already exist, one is created with value
       [default] *)
 
-  val destroy: t -> Transaction.side_effects Lwt.t
+  val destroy: t -> 'view Transaction.side_effects Lwt.t
   (** [destroy t]: removes the persistent cell *)
 
   val name: t -> string list
   (** [name t]: returns the [name] associated with the cell *)
 
-  val get: t -> (v * Transaction.side_effects) Lwt.t
+  val get: t -> (v * 'view Transaction.side_effects) Lwt.t
   (** [get t]: returns the current value *)
 
-  val set: v -> t -> Transaction.side_effects Lwt.t
+  val set: v -> t -> 'view Transaction.side_effects Lwt.t
   (** [set v t] sets the current value to [v]. When the thread completes
       the value is guaranteed to be in the persistent store and will
       survive a crash. *)
@@ -59,7 +59,7 @@ module Make(V: S.SEXPABLE) = struct
 
   let recreate t =
     Database.store >>= fun db ->
-    let tr = Transaction.make Transaction.none db in
+    Transaction.make Transaction.none db >>= fun tr ->
     let path = Protocol.Path.of_string_list t.name in
     let perms = Perms.of_domain 0 in
     let v =
@@ -76,7 +76,7 @@ module Make(V: S.SEXPABLE) = struct
 
   let destroy t =
     Database.store >>= fun db ->
-    let tr = Transaction.make Transaction.none db in
+    Transaction.make Transaction.none db >>= fun tr ->
     let path = Protocol.Path.of_string_list t.name in
     let perms = Perms.of_domain 0 in
     Transaction.rm tr perms path;
@@ -86,7 +86,7 @@ module Make(V: S.SEXPABLE) = struct
 
   let set v t =
     Database.store >>= fun db ->
-    let tr = Transaction.make Transaction.none db in
+    Transaction.make Transaction.none db >>= fun tr ->
     Transaction.write tr None 0 (Perms.of_domain 0) (Protocol.Path.of_string_list t.name) (Sexp.to_string (V.sexp_of_t v));
     return (Transaction.get_side_effects tr)
 

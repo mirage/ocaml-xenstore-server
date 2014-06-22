@@ -28,53 +28,23 @@ let fail_on_error = function
 | `Ok x -> return x
 | `Error x -> fail (Failure x)
 
-module Make = functor(T: S.SERVER) -> struct
+module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
 
-  include T
+  type channel_state = {
+    next_read_ofs: T.offset;                  (* the next byte to read *)
+    next_write_ofs: T.offset;                 (* the next byte to write *)
+  }
 
-  (* Side effects associated with a request *)
-  type side_effects = {
-    side_effects: Transaction.side_effects; (* a set of idempotent side-effects *)
-    next_read_ofs: offset;                  (* the next byte to read *)
-    next_write_ofs: offset;                 (* the next byte to write *)
-  } with sexp
-
-  let introspect channel =
-    let module Interface = struct
-      include Tree.Unsupported
-      let read t (perms: Perms.t) (path: Protocol.Path.t) =
-        Perms.has perms Perms.CONFIGURE;
-        match T.Introspect.read channel (Protocol.Path.to_string_list path) with
-        | Some x -> x
-        | None -> raise (Node.Doesnt_exist path)
-      let exists t perms path = try ignore(read t perms path); true with Node.Doesnt_exist _ -> false
-      let ls t perms path =
-        Perms.has perms Perms.CONFIGURE;
-        T.Introspect.ls channel (Protocol.Path.to_string_list path)
-      let write t _ _ perms path v =
-        Perms.has perms Perms.CONFIGURE;
-        if not(T.Introspect.write channel (Protocol.Path.to_string_list path) v)
-        then raise Perms.Permission_denied
-    end in
-    (module Interface: Tree.S)
-
-  let rec ls_lR channel path =
-    let keys = T.Introspect.ls channel path in
-    List.concat (List.map (fun k ->
-      let path' = path @ [ k ] in
-      match T.Introspect.read channel path' with
-      | None -> ls_lR channel path'
-      | Some v -> (path', v) :: (ls_lR channel path')
-    ) keys)
-
-  module PEffects = PRef.Make(struct type t = side_effects with sexp end)
+  module C = Connection.Make(V)
+  module E = Effects.Make(V)
 
   let handle_connection t =
-    lwt address = T.address_of t in
+    T.address_of t >>= fun address ->
     let dom = T.domain_of t in
-    let interface = introspect t in
-    Connection.create (address, dom) >>= fun (c, e1) ->
-    let special_path name = [ "tool"; "xenstored"; name; (match Uri.scheme address with Some x -> x | None -> "unknown"); string_of_int (Connection.index c) ] in
+
+    V.create () >>= fun v ->
+    C.create v (address, dom) >>= fun c ->
+    let special_path name = [ "tool"; "xenstored"; name; (match Uri.scheme address with Some x -> x | None -> "unknown"); string_of_int (C.index c) ] in
 
     (* If this is a restart, there will be an existing side_effects entry.
        If this is a new connection, we set an initial state *)
@@ -82,29 +52,25 @@ module Make = functor(T: S.SERVER) -> struct
     T.get_write_offset t >>= fun next_write_ofs ->
 
     let initial_state = {
-      side_effects = Transaction.no_side_effects();
       next_read_ofs;
       next_write_ofs;
     } in
 
-    PEffects.create (special_path "effects") initial_state >>= fun (peffects, e2) ->
+    let effects = ref initial_state in
 
-    let connection_path = Protocol.Path.of_string_list (special_path "transport") in
-    Mount.mount connection_path interface >>= fun e3 ->
+    let origin = Printf.sprintf "Accepted connection %d from domain %d over %s"
+      (C.index c) dom (match Uri.scheme address with None -> "unknown protocol" | Some x -> x) in
 
-    let origin = Printf.sprintf "Accepted connection %d from domain %d over %s\n\nInitial parameters:\n%s"
-      (Connection.index c) dom (match Uri.scheme address with None -> "unknown protocol" | Some x -> x)
-      (String.concat "\n" (List.map (fun (path, v) -> Printf.sprintf "  %s: %s" (String.concat "/" path) v) (ls_lR t []))) in
-
-    Database.persist ~origin Transaction.(e1 ++ e2 ++ e3) >>= fun () ->
+    V.merge v origin >>= fun () ->
 
     (* Hold this mutex when writing to the output channel: *)
     let write_m = Lwt_mutex.create () in
     Lwt_mutex.lock write_m >>= fun () ->
 
+(*
 		let (background_watch_event_flusher: unit Lwt.t) =
 			while_lwt true do
-        Connection.pop_watch_events c >>= fun w ->
+        C.pop_watch_events c >>= fun w ->
         (* XXX: it's possible to lose watch events if we crash here *)
         Lwt_mutex.lock write_m >>= fun () ->
         Lwt_list.iter_s
@@ -116,7 +82,7 @@ module Make = functor(T: S.SERVER) -> struct
         Lwt_mutex.unlock write_m;
         return ()
 			done in
-
+*)
     try_lwt
       let rec loop () =
         (* (Re-)complete any outstanding request. In the event of a crash
@@ -124,7 +90,8 @@ module Make = functor(T: S.SERVER) -> struct
            idempotent. *)
 
         (* First execute the idempotent side_effects *)
-        PEffects.get peffects >>= fun (r, e1) ->
+        let r = !effects in
+(*
         Quota.limits_of_domain dom >>= fun (limits, e2) ->
         let side_effects = Transaction.(e1 ++ e2) in
         Lwt_list.fold_left_s (fun side_effects w ->
@@ -144,35 +111,40 @@ module Make = functor(T: S.SERVER) -> struct
         Connection.PPerms.get (Connection.perm c) >>= fun (perm, e) ->
         let side_effects = Transaction.(side_effects ++ e) in
         Lwt_list.iter_s Introduce.introduce (Transaction.get_domains r.side_effects) >>= fun () ->
-
+*)
+(*
         let origin =
           Printf.sprintf "Resynchronising state for connection %d domain %d"
           (Connection.index c) dom in
         Database.persist ~origin side_effects >>= fun () ->
-
+*)
         (* Second transmit the response packet *)
-        flush t r.next_write_ofs >>= fun () ->
+        T.flush t r.next_write_ofs >>= fun () ->
         Lwt_mutex.unlock write_m;
+
+        V.create () >>= fun v ->
 
         (* Read the next request, parse, and compute the response actions.
            The transient in-memory store is updated. Other side-effects are
            computed but not executed. *)
         ( T.recv t r.next_read_ofs >>= function
           | read_ofs, `Ok (hdr, request) ->
-	          Connection.pop_watch_events_nowait c >>= fun events ->
-            Database.store >>= fun store ->
-
+          (*
+	          C.pop_watch_events_nowait c >>= fun events ->
+*)
             Lwt_mutex.lock write_m >>= fun () ->
             (* This will 'commit' updates to the in-memory store: *)
-            Call.reply store (Some limits) perm c hdr request >>= fun (response, side_effects) ->
+(*
+            E.reply v (Some limits) perm c hdr request >>= fun (response, side_effects) ->
+*)
+            E.reply v hdr request >>= fun (response, side_effects) ->
             return (response, side_effects, read_ofs)
           | read_ofs, `Error msg ->
 					  (* quirk: if this is a NULL-termination error then it should be EINVAL *)
             let response = Protocol.Response.Error "EINVAL" in
-            let side_effects = Transaction.no_side_effects () in
 
             Lwt_mutex.lock write_m >>= fun () ->
-            return (response, side_effects, read_ofs )
+            return (response, Effects.nothing, read_ofs )
         ) >>= fun (response, side_effects, next_read_ofs) ->
 
           (* If we crash here then future iterations of the loop will read
@@ -185,36 +157,33 @@ module Make = functor(T: S.SERVER) -> struct
           (* If we crash here the packet will be dropped because we've not persisted
              the side-effects, including the write_ofs value: *)
 
-          PEffects.set { side_effects; next_read_ofs; next_write_ofs } peffects >>= fun e ->
-          let origin =
-            Printf.sprintf "Journalling state for connection %d domain %d"
-            (Connection.index c) dom in
-          Database.persist ~origin e >>= fun () ->
-          let updates = Transaction.get_updates side_effects in
-          begin match updates with
-          | [] -> return ()
-          | _ ->
-            let origin = Printf.sprintf "Transaction from connection %d domain %d\n\n%s"
-              (Connection.index c) dom
-              (String.concat "\n" (List.map Store.string_of_update updates)) in
-            Database.persist ~origin side_effects
-          end >>= fun () ->
-          loop () in
+          effects := { next_read_ofs; next_write_ofs };
+
+          let origin = Printf.sprintf "Transaction from connection %d domain %d"
+              (C.index c) dom in
+          V.merge v origin >>= fun () ->
+        loop () in
 			loop ()
 		with e ->
+    (*
 			Lwt.cancel background_watch_event_flusher;
       Mount.unmount connection_path >>= fun e1 ->
-			Connection.destroy address >>= fun e2 ->
+      *)
+      V.create () >>= fun v ->
+			C.destroy v c >>= fun () ->
+      V.merge v (Printf.sprintf "Closing connection %d to domain %d\n\nException was: %s"
+        (C.index c) dom (Printexc.to_string e)) >>= fun () ->
+      (*
       PEffects.destroy peffects >>= fun e3 ->
       Quota.remove dom >>= fun e4 ->
       let origin =
         Printf.sprintf "Closing connection %d domain %d\n\nException was: %s"
           (Connection.index c) dom (Printexc.to_string e) in
       Database.persist ~origin Transaction.(e1 ++ e2 ++ e3 ++ e4) >>= fun () ->
+      *)
       T.destroy t
 
-	let serve_forever persistence =
-    Database.initialise persistence >>= fun () ->
-		lwt server = T.listen () in
+	let serve_forever () =
+		T.listen () >>= fun server ->
 		T.accept_forever server handle_connection
 end
