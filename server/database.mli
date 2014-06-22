@@ -14,6 +14,22 @@
 
 open Xenstore
 
+module type VIEW = sig
+  type t
+
+  val create: unit -> t Lwt.t
+
+  val read: t -> Protocol.Path.t -> Node.contents Lwt.t
+
+  val write: t -> Protocol.Path.t -> Node.contents -> unit Lwt.t
+
+  val rm: t -> Protocol.Path.t -> unit Lwt.t
+
+  val merge: t -> string -> unit Lwt.t
+end
+
+val view: (module VIEW) Lwt.t
+
 val persist: ?origin:string -> Transaction.side_effects -> unit Lwt.t
 (** Persists the given side-effects. Make sure you start exactly one
     persistence thread *)
