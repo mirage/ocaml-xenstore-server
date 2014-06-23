@@ -76,6 +76,6 @@ let _ =
   return ()
 *)
 
-let introduce _ = fail (Failure "introduce")
+let introduce _ = return ()
 let forget _ = fail (Failure "forget")
 let stream, _ = Lwt_stream.create()

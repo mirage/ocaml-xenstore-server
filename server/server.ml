@@ -165,6 +165,8 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
         loop () in
 			loop ()
 		with e ->
+      info "Closing connection %d to domain %d: %s"
+        (C.index c) dom (Printexc.to_string e);
     (*
 			Lwt.cancel background_watch_event_flusher;
       Mount.unmount connection_path >>= fun e1 ->

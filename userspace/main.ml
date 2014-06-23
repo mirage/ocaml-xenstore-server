@@ -198,14 +198,18 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
   Introduce.(introduce { Domain.domid = 0; mfn = 0n; remote_port = 0 }) >>= fun () ->
   debug "Introduced domain 0";
   lwt () = a in
+  debug "Unix domain socket server has shutdown.";
   lwt () = b in
-  debug "No running transports, shutting down.";
+  debug "Xen interdomain server has shutdown.";
+  debug "No servers remaining, shutting down.";
   return ()
 
 let with_logging daemon program_thread =
   info "User-space xenstored version %s starting" Version.version;
   let l_t = logging_thread daemon Logging.logger in
-  Lwt.catch program_thread (fun _ -> return ()) >>= fun () ->
+  Lwt.catch program_thread (fun e ->
+    error "Main thread threw %s" (Printexc.to_string e);
+    return ()) >>= fun () ->
   shutdown_logger ();
   l_t
 
