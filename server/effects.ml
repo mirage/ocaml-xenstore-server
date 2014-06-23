@@ -46,6 +46,13 @@ module Make(V: VIEW) = struct
                        value }) in
     V.write v path node >>|= fun () ->
     return (`Ok (Protocol.Response.Write, nothing))
+  | Protocol.Request.PathOp (path, Protocol.Request.Mkdir) ->
+    let path = Protocol.Path.of_string path in
+    let node = Node.({ creator = 0;
+                       perms = Protocol.ACL.({ owner = 0; other = NONE; acl = []});
+                       value = "" }) in
+    V.write v path node >>|= fun () ->
+    return (`Ok (Protocol.Response.Write, nothing))
   | Protocol.Request.PathOp (path, Protocol.Request.Rm) ->
     let path = Protocol.Path.of_string path in
     V.rm v path >>|= fun node ->
