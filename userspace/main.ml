@@ -125,6 +125,27 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
         DB.View.update t (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents)) >>= fun () ->
         return (`Ok ())
       with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
+    let list t path =
+      debug "ls %s" (Protocol.Path.to_string path);
+      (try_lwt
+        (* TODO: differentiate a directory which doesn't exist from an empty directory
+        DB.View.read (value_of_filename path) >>= function
+        | None -> return (`Enoent path)
+        | Some _ ->
+        *)
+          DB.View.list t [ dir_of_filename path ] >>= fun keys ->
+          return (`Ok (List.fold_left (fun acc x -> match (List.rev x) with
+            | basename :: _ ->
+              if endswith dir_suffix basename
+              then remove_suffix dir_suffix basename :: acc
+              else
+                if endswith value_suffix basename
+                then remove_suffix value_suffix basename :: acc
+                else acc
+            | [] -> acc
+          ) [] keys))
+      with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
+
     let rm t path =
       debug "- %s" (Protocol.Path.to_string path);
       (try_lwt
