@@ -26,6 +26,10 @@ module Make(V: VIEW) = struct
     let path = Protocol.Path.of_string path in
     V.read v path >>|= fun node ->
     return (`Ok (Protocol.Response.Read node.Node.value, nothing))
+  | Protocol.Request.PathOp (path, Protocol.Request.Getperms) ->
+    let path = Protocol.Path.of_string path in
+    V.read v path >>|= fun node ->
+    return (`Ok (Protocol.Response.Getperms node.Node.perms, nothing))  
   | Protocol.Request.PathOp (path, Protocol.Request.Directory) ->
     let path = Protocol.Path.of_string path in
     V.list v path >>|= fun names ->
