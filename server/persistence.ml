@@ -27,9 +27,9 @@ module type VIEW = sig
 
   val create: unit -> t Lwt.t
 
-  val read: t -> Protocol.Path.t -> Node.contents Lwt.t
+  val read: t -> Protocol.Path.t -> [ `Ok of Node.contents | `Enoent of Protocol.Path.t ] Lwt.t
 
-  val write: t -> Protocol.Path.t -> Node.contents -> unit Lwt.t
+  val write: t -> Protocol.Path.t -> Node.contents -> [ `Ok of unit ] Lwt.t
 
   val rm: t -> Protocol.Path.t -> unit Lwt.t
 

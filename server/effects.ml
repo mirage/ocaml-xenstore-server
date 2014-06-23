@@ -5,25 +5,53 @@ open Persistence
 
 
 let debug fmt = Logging.debug "effects" fmt
-let info  fmt = Logging.info "effects" fmt
+let info  fmt = Logging.info  "effects" fmt
 let error fmt = Logging.error "effects" fmt
 
 type t = unit
 
 let nothing = ()
 
+exception Not_implemented of string
+
+let (>>|=) m f = m >>= function
+  | `Ok x -> f x
+  | `Enoent _
+  | `Not_implemented _ as e -> return e
+
 module Make(V: VIEW) = struct
 
-  let reply_or_fail v hdr req = fail Not_found
+  let reply_or_fail v hdr req = match req with
+  | Protocol.Request.PathOp (path, Protocol.Request.Read) ->
+    let path = Protocol.Path.of_string path in
+    V.read v path >>|= fun node ->
+    return (`Ok (Protocol.Response.Read node.Node.value, nothing))
+  | Protocol.Request.PathOp (path, Protocol.Request.Write value) ->
+    let path = Protocol.Path.of_string path in
+    let node = Node.({ creator = 0;
+                       perms = Protocol.ACL.({ owner = 0; other = NONE; acl = []});
+                       value }) in
+    V.write v path node >>|= fun () ->
+    return (`Ok (Protocol.Response.Write, nothing))
+  | _ ->
+    return (`Not_implemented (Protocol.Op.to_string hdr.Protocol.Header.ty))
 
   let reply v hdr req =
+    debug "<-  rid %ld tid %ld %s"
+      hdr.Protocol.Header.rid hdr.Protocol.Header.tid
+      (Sexp.to_string (Protocol.Request.sexp_of_t req));
+
+    let errorwith ?(error_info = None) code =
+      return ((Protocol.Response.Error code, nothing), error_info) in
+
     Lwt.catch
       (fun () ->
-        reply_or_fail v hdr req >>= fun x ->
-        return (x, None))
+        reply_or_fail v hdr req >>= function
+        | `Ok x -> return (x, None)
+        | `Enoent path -> errorwith ~error_info:(Some (Protocol.Path.to_string path)) "ENOENT"
+        | `Not_implemented fn -> errorwith ~error_info:(Some fn) "EINVAL"
+      )
       (fun e ->
-        let errorwith ?(error_info = Some (Printexc.to_string e)) code =
-          return ((Protocol.Response.Error code, nothing), error_info) in
         match e with
         (*
         | Transaction_again                     -> errorwith "EAGAIN"
@@ -35,6 +63,7 @@ module Make(V: VIEW) = struct
         | Protocol.Path.Invalid_path(p, reason) -> errorwith ~error_info:(Some (Printf.sprintf "%s: %s" p reason)) "EINVAL"
         | Not_found                             -> errorwith "ENOENT"
         | Invalid_argument i                    -> errorwith ~error_info:(Some i) "EINVAL"
+        | Not_implemented x                     -> errorwith ~error_info:(Some x) "EINVAL"
         (*
         | Limits.Data_too_big                   -> errorwith "E2BIG"
         | Limits.Transaction_opened             -> errorwith "EQUOTA" *)
@@ -47,8 +76,8 @@ module Make(V: VIEW) = struct
              failures where EINVAL is expected instead of EIO *)
           errorwith "EINVAL"
       ) >>= fun ((response_payload, side_effects), info) ->
-    debug "-> out  %ld %s%s"
-      hdr.Protocol.Header.tid
+    debug "->  rid %ld tid %ld %s%s"
+      hdr.Protocol.Header.rid hdr.Protocol.Header.tid
       (Sexp.to_string (Protocol.Response.sexp_of_t response_payload))
       (match info with None -> "" | Some x -> " " ^ x);
     return (response_payload, side_effects)

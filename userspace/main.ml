@@ -118,19 +118,25 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
       let suffix' = String.length suffix and x' = String.length x in
       suffix' <= x' && (String.sub x (x' - suffix') suffix' = suffix)
 
-    let create = DB.View.create
+    let create () = DB.View.of_path db []
     let write t path contents =
       debug "+ %s" (Protocol.Path.to_string path);
       (try_lwt
-        DB.View.update t (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents))
-      with e -> (error "%s" (Printexc.to_string e)); return ())
+        DB.View.update t (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents)) >>= fun () ->
+        return (`Ok ())
+      with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
     let rm t path =
       debug "- %s" (Protocol.Path.to_string path);
       (try_lwt
         DB.View.remove t (dir_of_filename path) >>= fun () ->
         DB.View.remove t (value_of_filename path)
       with e -> (error "%s" (Printexc.to_string e)); return ())
-    let read t _ = fail (Failure "not implemented")
+    let read t path =
+      (try_lwt
+        DB.View.read t (value_of_filename path) >>= function
+        | None -> return (`Enoent path)
+        | Some x -> return (`Ok (Node.contents_of_sexp (Sexp.of_string x)))
+       with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
     let merge t origin =
       let origin = IrminOrigin.create "%s" origin in
       DB.View.merge_path ~origin db [] t >>= function
