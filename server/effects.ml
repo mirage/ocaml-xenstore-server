@@ -57,6 +57,8 @@ module Make(V: VIEW) = struct
     let path = Protocol.Path.of_string path in
     V.rm v path >>|= fun node ->
     return (`Ok (Protocol.Response.Rm, nothing))
+  | Protocol.Request.Getdomainpath domid ->
+    return (`Ok (Protocol.Response.Getdomainpath (Printf.sprintf "/local/domain/%d" domid), nothing))
   | _ ->
     return (`Not_implemented (Protocol.Op.to_string hdr.Protocol.Header.ty))
 
