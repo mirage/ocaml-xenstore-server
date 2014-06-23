@@ -25,7 +25,7 @@ module type VIEW = sig
 
   val write: t -> Protocol.Path.t -> Node.contents -> [ `Ok of unit ] Lwt.t
 
-  val rm: t -> Protocol.Path.t -> unit Lwt.t
+  val rm: t -> Protocol.Path.t -> [ `Ok of unit ] Lwt.t
 
   val merge: t -> string -> unit Lwt.t
 end

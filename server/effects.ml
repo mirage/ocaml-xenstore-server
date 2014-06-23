@@ -46,6 +46,10 @@ module Make(V: VIEW) = struct
                        value }) in
     V.write v path node >>|= fun () ->
     return (`Ok (Protocol.Response.Write, nothing))
+  | Protocol.Request.PathOp (path, Protocol.Request.Rm) ->
+    let path = Protocol.Path.of_string path in
+    V.rm v path >>|= fun node ->
+    return (`Ok (Protocol.Response.Rm, nothing))
   | _ ->
     return (`Not_implemented (Protocol.Op.to_string hdr.Protocol.Header.ty))
 

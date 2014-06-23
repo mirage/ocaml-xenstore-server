@@ -150,8 +150,9 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
       debug "- %s" (Protocol.Path.to_string path);
       (try_lwt
         DB.View.remove t (dir_of_filename path) >>= fun () ->
-        DB.View.remove t (value_of_filename path)
-      with e -> (error "%s" (Printexc.to_string e)); return ())
+        DB.View.remove t (value_of_filename path) >>= fun () ->
+        return (`Ok ())
+      with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
     let read t path =
       (try_lwt
         DB.View.read t (value_of_filename path) >>= function
