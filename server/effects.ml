@@ -29,7 +29,12 @@ module Make(V: VIEW) = struct
   | Protocol.Request.PathOp (path, Protocol.Request.Getperms) ->
     let path = Protocol.Path.of_string path in
     V.read v path >>|= fun node ->
-    return (`Ok (Protocol.Response.Getperms node.Node.perms, nothing))  
+    return (`Ok (Protocol.Response.Getperms node.Node.perms, nothing))
+  | Protocol.Request.PathOp (path, Protocol.Request.Setperms perms) ->
+    let path = Protocol.Path.of_string path in
+    V.read v path >>|= fun node ->
+    V.write v path { node with Node.perms } >>|= fun () ->
+    return (`Ok (Protocol.Response.Setperms, nothing))
   | Protocol.Request.PathOp (path, Protocol.Request.Directory) ->
     let path = Protocol.Path.of_string path in
     V.list v path >>|= fun names ->
