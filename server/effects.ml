@@ -59,8 +59,7 @@ module Make(V: VIEW) = struct
         | true ->
           return (`Ok (response, side_effects))
         | false ->
-          if counter mod 1000 = 0
-          then error "rid %ld tid %ld failed to merge after %d attempts"
+          info "rid %ld tid %ld failed to merge after %d attempts"
             hdr.Header.rid hdr.Header.tid counter;
           retry (counter + 1) in
       retry 0
