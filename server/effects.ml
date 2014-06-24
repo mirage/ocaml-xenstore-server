@@ -24,10 +24,10 @@ module Make(V: VIEW) = struct
     | true ->
       return (`Ok ())
     | false ->
+      (* The root node has been created in Main, otherwise we'd blow the
+         stack here. *)
       let dirname = Path.dirname path in
-      ( if dirname <> Path.empty
-        then mkdir v dirname node
-        else return (`Ok ()) ) >>|= fun () ->
+      mkdir v dirname node >>|= fun () ->
       V.write v path node >>|= fun () ->
       return (`Ok ())
 
