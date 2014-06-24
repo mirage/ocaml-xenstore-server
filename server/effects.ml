@@ -32,6 +32,12 @@ module Make(V: VIEW) = struct
       V.write v path Node.({ node with creator; value = "" }) >>|= fun () ->
       return (`Ok ())
 
+  (* Rm is recursive *)
+  let rec rm v path =
+    V.list v path >>|= fun names ->
+    V.rm v path >>|= fun () ->
+    iter_s (rm v) (List.map (fun name -> Path.concat path (Path.of_string name)) names)
+
   let transactions = Hashtbl.create 16
 
   let next_transaction_id =
@@ -89,7 +95,7 @@ module Make(V: VIEW) = struct
     mkdir v path domid >>|= fun () ->
     return (`Ok (Response.Write, nothing))
   | Request.Rm ->
-    V.rm v path >>|= fun node ->
+    rm v path >>|= fun () ->
     return (`Ok (Response.Rm, nothing))
 
   let reply_or_fail domid perms hdr req = match req with

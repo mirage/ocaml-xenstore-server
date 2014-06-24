@@ -6,6 +6,12 @@ let (>>|=) m f = m >>= function
   | `Not_implemented _
   | `Conflict as e -> return e
 
+let rec iter_s f = function
+  | [] -> return (`Ok ())
+  | x :: xs ->
+    f x >>|= fun () ->
+    iter_s f xs
+
 let fail_on_error m = m >>= function
 | `Ok x -> return x
 | `Enoent x -> fail (Failure (Printf.sprintf "The path %s does not exist" x))
