@@ -68,7 +68,7 @@ module type SERVER = sig
 
   val flush: connection -> offset -> unit t
 
-  val enqueue: connection -> Protocol.Response.t -> offset t
+  val enqueue: connection -> Protocol.Header.t -> Protocol.Response.t -> offset t
 
   val recv: connection -> offset -> (offset * [ `Ok of (Protocol.Header.t * Protocol.Request.t) | `Error of string ]) t
 
