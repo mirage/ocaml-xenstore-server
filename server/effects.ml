@@ -40,46 +40,60 @@ module Make(V: VIEW) = struct
             perms = Protocol.ACL.({ owner = 0; other = NONE; acl = []});
             value = "" })
 
-  let reply_or_fail v hdr req = match req with
-  | Protocol.Request.PathOp (path, Protocol.Request.Read) ->
-    let path = Protocol.Path.of_string path in
+  let transactions = Hashtbl.create 16
+
+  let with_transaction hdr f =
+    if hdr.Protocol.Header.tid = 0l then begin
+      (* XXX: this shouldn't be allowed to generate conflicts *)
+      V.create () >>= fun v ->
+      f v >>|= fun (response, side_effects) ->
+      V.merge v "with_transaction" >>= fun () ->
+      return (`Ok (response, side_effects))
+    end else begin
+      let v = Hashtbl.find transactions hdr.Protocol.Header.tid in
+      f v
+    end
+
+  (* The 'path operations' are the ones which can be done in transactions.
+     The other operations are always done outside any current transaction. *)
+  let pathop path op v = match op with
+  | Protocol.Request.Read ->
     V.read v path >>|= fun node ->
     return (`Ok (Protocol.Response.Read node.Node.value, nothing))
-  | Protocol.Request.PathOp (path, Protocol.Request.Getperms) ->
-    let path = Protocol.Path.of_string path in
+  | Protocol.Request.Getperms ->
     V.read v path >>|= fun node ->
     return (`Ok (Protocol.Response.Getperms node.Node.perms, nothing))
-  | Protocol.Request.PathOp (path, Protocol.Request.Setperms perms) ->
-    let path = Protocol.Path.of_string path in
+  | Protocol.Request.Setperms perms ->
     V.read v path >>|= fun node ->
     V.write v path { node with Node.perms } >>|= fun () ->
     return (`Ok (Protocol.Response.Setperms, nothing))
-  | Protocol.Request.PathOp (path, Protocol.Request.Directory) ->
-    let path = Protocol.Path.of_string path in
+  | Protocol.Request.Directory ->
     V.list v path >>|= fun names ->
     return (`Ok (Protocol.Response.Directory names, nothing))
-  | Protocol.Request.PathOp (path, Protocol.Request.Write value) ->
-    let path = Protocol.Path.of_string path in
+  | Protocol.Request.Write value ->
     let node = Node.({ creator = 0;
                        perms = Protocol.ACL.({ owner = 0; other = NONE; acl = []});
                        value }) in
     mkdir v (Protocol.Path.dirname path) (empty_node ()) >>|= fun () ->
     V.write v path node >>|= fun () ->
     return (`Ok (Protocol.Response.Write, nothing))
-  | Protocol.Request.PathOp (path, Protocol.Request.Mkdir) ->
-    let path = Protocol.Path.of_string path in
+  | Protocol.Request.Mkdir ->
     mkdir v path (empty_node ()) >>|= fun () ->
     return (`Ok (Protocol.Response.Write, nothing))
-  | Protocol.Request.PathOp (path, Protocol.Request.Rm) ->
-    let path = Protocol.Path.of_string path in
+  | Protocol.Request.Rm ->
     V.rm v path >>|= fun node ->
     return (`Ok (Protocol.Response.Rm, nothing))
+
+  let reply_or_fail hdr req = match req with
+  | Protocol.Request.PathOp (path, op) ->
+    let path = Protocol.Path.of_string path in
+    with_transaction hdr (pathop path op)
   | Protocol.Request.Getdomainpath domid ->
     return (`Ok (Protocol.Response.Getdomainpath (Printf.sprintf "/local/domain/%d" domid), nothing))
   | _ ->
     return (`Not_implemented (Protocol.Op.to_string hdr.Protocol.Header.ty))
 
-  let reply v hdr req =
+  let reply hdr req =
     debug "<-  rid %ld tid %ld %s"
       hdr.Protocol.Header.rid hdr.Protocol.Header.tid
       (Sexp.to_string (Protocol.Request.sexp_of_t req));
@@ -89,7 +103,7 @@ module Make(V: VIEW) = struct
 
     Lwt.catch
       (fun () ->
-        reply_or_fail v hdr req >>= function
+        reply_or_fail hdr req >>= function
         | `Ok x -> return (x, None)
         | `Enoent path -> errorwith ~error_info:(Some (Protocol.Path.to_string path)) "ENOENT"
         | `Not_implemented fn -> errorwith ~error_info:(Some fn) "EINVAL"

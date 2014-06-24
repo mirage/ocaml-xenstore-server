@@ -122,8 +122,6 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
         T.flush t r.next_write_ofs >>= fun () ->
         Lwt_mutex.unlock write_m;
 
-        V.create () >>= fun v ->
-
         (* Read the next request, parse, and compute the response actions.
            The transient in-memory store is updated. Other side-effects are
            computed but not executed. *)
@@ -137,7 +135,7 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
 (*
             E.reply v (Some limits) perm c hdr request >>= fun (response, side_effects) ->
 *)
-            E.reply v hdr request >>= fun (response, side_effects) ->
+            E.reply hdr request >>= fun (response, side_effects) ->
             return (response, side_effects, read_ofs)
           | read_ofs, `Error msg ->
 					  (* quirk: if this is a NULL-termination error then it should be EINVAL *)
@@ -161,7 +159,6 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
 
           let origin = Printf.sprintf "Transaction from connection %d domain %d"
               (C.index c) dom in
-          V.merge v origin >>= fun () ->
         loop () in
 			loop ()
 		with e ->
