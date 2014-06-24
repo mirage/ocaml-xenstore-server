@@ -21,6 +21,25 @@ let (>>|=) m f = m >>= function
 
 module Make(V: VIEW) = struct
 
+  (* Every write or mkdir will recursively create parent nodes if they
+     don't already exist. *)
+  let rec mkdir v path node =
+    V.mem v path >>= function
+    | true ->
+      return (`Ok ())
+    | false ->
+      let dirname = Protocol.Path.dirname path in
+      ( if dirname <> Protocol.Path.empty
+        then mkdir v dirname node
+        else return (`Ok ()) ) >>|= fun () ->
+      V.write v path node >>|= fun () ->
+      return (`Ok ())
+
+  let empty_node () =
+    Node.({ creator = 0;
+            perms = Protocol.ACL.({ owner = 0; other = NONE; acl = []});
+            value = "" })
+
   let reply_or_fail v hdr req = match req with
   | Protocol.Request.PathOp (path, Protocol.Request.Read) ->
     let path = Protocol.Path.of_string path in
@@ -44,14 +63,12 @@ module Make(V: VIEW) = struct
     let node = Node.({ creator = 0;
                        perms = Protocol.ACL.({ owner = 0; other = NONE; acl = []});
                        value }) in
+    mkdir v (Protocol.Path.dirname path) (empty_node ()) >>|= fun () ->
     V.write v path node >>|= fun () ->
     return (`Ok (Protocol.Response.Write, nothing))
   | Protocol.Request.PathOp (path, Protocol.Request.Mkdir) ->
     let path = Protocol.Path.of_string path in
-    let node = Node.({ creator = 0;
-                       perms = Protocol.ACL.({ owner = 0; other = NONE; acl = []});
-                       value = "" }) in
-    V.write v path node >>|= fun () ->
+    mkdir v path (empty_node ()) >>|= fun () ->
     return (`Ok (Protocol.Response.Write, nothing))
   | Protocol.Request.PathOp (path, Protocol.Request.Rm) ->
     let path = Protocol.Path.of_string path in
@@ -93,14 +110,14 @@ module Make(V: VIEW) = struct
         (*
         | Limits.Data_too_big                   -> errorwith "E2BIG"
         | Limits.Transaction_opened             -> errorwith "EQUOTA" *)
-        | (Failure "int_of_string")             -> errorwith "EINVAL"
+        | (Failure "int_of_string")             -> errorwith ~error_info:(Some "int_of_string") "EINVAL"
         (*
         | Tree.Unsupported                      -> errorwith "ENOTSUP"
         *)
-        | _ ->
+        | e ->
           (* quirk: Write <string> (no value) is one of several parse
              failures where EINVAL is expected instead of EIO *)
-          errorwith "EINVAL"
+          errorwith ~error_info:(Some (Printexc.to_string e)) "EINVAL"
       ) >>= fun ((response_payload, side_effects), info) ->
     debug "->  rid %ld tid %ld %s%s"
       hdr.Protocol.Header.rid hdr.Protocol.Header.tid

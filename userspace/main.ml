@@ -119,6 +119,10 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
       suffix' <= x' && (String.sub x (x' - suffix') suffix' = suffix)
 
     let create () = DB.View.of_path db []
+    let mem t path =
+      (try_lwt
+        DB.View.mem t (value_of_filename path)
+       with e -> (error "%s" (Printexc.to_string e); return false))
     let write t path contents =
       debug "+ %s" (Protocol.Path.to_string path);
       (try_lwt
@@ -134,13 +138,14 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
         | Some _ ->
         *)
           DB.View.list t [ dir_of_filename path ] >>= fun keys ->
+          let union x xs = if not(List.mem x xs) then x :: xs else xs in
           return (`Ok (List.fold_left (fun acc x -> match (List.rev x) with
             | basename :: _ ->
               if endswith dir_suffix basename
-              then remove_suffix dir_suffix basename :: acc
+              then union (remove_suffix dir_suffix basename) acc
               else
                 if endswith value_suffix basename
-                then remove_suffix value_suffix basename :: acc
+                then union (remove_suffix value_suffix basename) acc
                 else acc
             | [] -> acc
           ) [] keys))
