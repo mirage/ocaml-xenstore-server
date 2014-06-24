@@ -19,7 +19,7 @@ module Make(V: VIEW) = struct
 
   (* Every write or mkdir will recursively create parent nodes if they
      don't already exist. *)
-  let rec mkdir v path node =
+  let rec mkdir v path creator =
     V.mem v path >>= function
     | true ->
       return (`Ok ())
@@ -27,8 +27,9 @@ module Make(V: VIEW) = struct
       (* The root node has been created in Main, otherwise we'd blow the
          stack here. *)
       let dirname = Path.dirname path in
-      mkdir v dirname node >>|= fun () ->
-      V.write v path node >>|= fun () ->
+      mkdir v dirname creator >>|= fun () ->
+      V.read v dirname >>|= fun node ->
+      V.write v path Node.({ node with creator; value = "" }) >>|= fun () ->
       return (`Ok ())
 
   let transactions = Hashtbl.create 16
@@ -61,11 +62,6 @@ module Make(V: VIEW) = struct
       f v
     end
 
-  let empty_node () =
-    Node.({ creator = 0;
-            perms = ACL.({ owner = 0; other = NONE; acl = []});
-            value = "" })
-
   (* The 'path operations' are the ones which can be done in transactions.
      The other operations are always done outside any current transaction. *)
   let pathop domid perms path op v = match op with
@@ -83,14 +79,13 @@ module Make(V: VIEW) = struct
     V.list v path >>|= fun names ->
     return (`Ok (Response.Directory names, nothing))
   | Request.Write value ->
-    let node = Node.({ creator = 0;
-                       perms = ACL.({ owner = 0; other = NONE; acl = []});
-                       value }) in
-    mkdir v (Path.dirname path) (empty_node ()) >>|= fun () ->
-    V.write v path node >>|= fun () ->
+    let dirname = Path.dirname path in
+    mkdir v dirname domid >>|= fun () ->
+    V.read v dirname >>|= fun node ->
+    V.write v path Node.({ node with creator = domid; value }) >>|= fun () ->
     return (`Ok (Response.Write, nothing))
   | Request.Mkdir ->
-    mkdir v path (empty_node ()) >>|= fun () ->
+    mkdir v path domid >>|= fun () ->
     return (`Ok (Response.Write, nothing))
   | Request.Rm ->
     V.rm v path >>|= fun node ->
