@@ -93,7 +93,7 @@ module Make(V: VIEW) = struct
     return (`Ok (Response.Write, nothing))
   | Request.Mkdir ->
     mkdir v path domid >>|= fun () ->
-    return (`Ok (Response.Write, nothing))
+    return (`Ok (Response.Mkdir, nothing))
   | Request.Rm ->
     rm v path >>|= fun () ->
     return (`Ok (Response.Rm, nothing))
