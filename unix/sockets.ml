@@ -255,13 +255,12 @@ let get_write_offset _ = return ()
 
 let flush _ _ = return ()
 
-let enqueue t response =
+let enqueue t hdr response =
   let reply_buf = t.write_buffer in
   let payload_buf = Cstruct.shift reply_buf Protocol.Header.sizeof in
   let next = Protocol.Response.marshal response payload_buf in
   let length = next.Cstruct.off - payload_buf.Cstruct.off in
-  (* XXX: where did the tid and rid go? *)
-  let hdr = { Protocol.Header.tid = 0l; rid = 0l; ty = Protocol.Response.get_ty response; len = length} in
+  let hdr = Protocol.Header.({ hdr with len = length }) in
   ignore (Protocol.Header.marshal hdr reply_buf);
   write t (Cstruct.sub t.write_buffer 0 (Protocol.Header.sizeof + length))
 

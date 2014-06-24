@@ -327,13 +327,13 @@ let rec flush t next_write_ofs =
   end
 
 (* Enqueue an output packet. This assumes that the output buffer is empty. *)
-let enqueue t response =
+let enqueue t hdr response =
   let reply_buf = get_buffer_buffer t.output in
   let payload_buf = Cstruct.shift reply_buf Protocol.Header.sizeof in
 
   let next = Protocol.Response.marshal response payload_buf in
   let length = next.Cstruct.off - payload_buf.Cstruct.off in
-  let hdr = { Protocol.Header.tid = 0l; rid = 0l; ty = Protocol.Response.get_ty response; len = length} in
+  let hdr = Protocol.Header.({ hdr with len = length }) in
   ignore (Protocol.Header.marshal hdr reply_buf);
   Writer.next t >>= fun (offset, _) ->
   set_buffer_length t.output (length + Protocol.Header.sizeof);
@@ -406,7 +406,7 @@ let get_read_offset t =
 let get_write_offset t =
   Writer.next t >>= fun (next_write_ofs, _) ->
   return next_write_ofs
-  
+
 let destroy t =
   let eventchn = Eventchn.init () in
   Eventchn.(unbind eventchn (of_int t.port));

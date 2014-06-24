@@ -134,14 +134,16 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
             E.reply v (Some limits) perm c hdr request >>= fun (response, side_effects) ->
 *)
             E.reply domid perms hdr request >>= fun (response, side_effects) ->
-            return (response, side_effects, read_ofs)
+            let hdr = Protocol.({ hdr with Header.ty = Response.get_ty response}) in
+            return (hdr, response, side_effects, read_ofs)
           | read_ofs, `Error msg ->
 					  (* quirk: if this is a NULL-termination error then it should be EINVAL *)
             let response = Protocol.Response.Error "EINVAL" in
 
             Lwt_mutex.lock write_m >>= fun () ->
-            return (response, Effects.nothing, read_ofs )
-        ) >>= fun (response, side_effects, next_read_ofs) ->
+            let hdr = Header.({ tid = -1l; rid = -1l; ty = Op.Error; len = 0 }) in
+            return (hdr, response, Effects.nothing, read_ofs )
+        ) >>= fun (hdr, response, side_effects, next_read_ofs) ->
 
           (* If we crash here then future iterations of the loop will read
              the same request packet. However since every connection is processed
@@ -149,7 +151,7 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
              Therefore the choice of which transaction to commit may be made
              differently each time, however the client should be unaware of this. *)
 
-          T.enqueue t response >>= fun next_write_ofs ->
+          T.enqueue t hdr response >>= fun next_write_ofs ->
           (* If we crash here the packet will be dropped because we've not persisted
              the side-effects, including the write_ofs value: *)
 
