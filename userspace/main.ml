@@ -16,11 +16,11 @@ open Sexplib
 open Lwt
 open Xenstore
 open Xenstored
+open Error
 
 let debug fmt = Logging.debug "xenstored" fmt
 let info  fmt = Logging.info  "xenstored" fmt
 let error fmt = Logging.error "xenstored" fmt
-
 
 let syslog = Lwt_log.syslog ~facility:`Daemon ()
 
@@ -173,6 +173,13 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
         return false
   end in
 
+  (* Create the root node *)
+  V.create () >>= fun v ->
+  fail_on_error (V.write v Protocol.Path.empty Node.({ creator = 0;
+                                                       perms = Protocol.ACL.({ owner = 0; other = NONE; acl = []});
+                                                       value = "" })) >>= fun () ->
+  V.merge v "Adding root node" >>= fun ok ->
+  ( if not ok then fail (Failure "Failed to merge transaction writing the root node") else return () ) >>= fun () ->
   let module UnixServer = Server.Make(Sockets)(V) in
   let module DomainServer = Server.Make(Interdomain)(V) in
 

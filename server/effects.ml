@@ -3,6 +3,7 @@ open Sexplib
 open Xenstore
 open Protocol
 open Persistence
+open Error
 
 let debug fmt = Logging.debug "effects" fmt
 let info  fmt = Logging.info  "effects" fmt
@@ -13,12 +14,6 @@ type t = unit
 let nothing = ()
 
 exception Not_implemented of string
-
-let (>>|=) m f = m >>= function
-  | `Ok x -> f x
-  | `Enoent _
-  | `Not_implemented _
-  | `Conflict as e -> return e
 
 module Make(V: VIEW) = struct
 
@@ -35,11 +30,6 @@ module Make(V: VIEW) = struct
         else return (`Ok ()) ) >>|= fun () ->
       V.write v path node >>|= fun () ->
       return (`Ok ())
-
-  let empty_node () =
-    Node.({ creator = 0;
-            perms = ACL.({ owner = 0; other = NONE; acl = []});
-            value = "" })
 
   let transactions = Hashtbl.create 16
 
@@ -71,9 +61,14 @@ module Make(V: VIEW) = struct
       f v
     end
 
+  let empty_node () =
+    Node.({ creator = 0;
+            perms = ACL.({ owner = 0; other = NONE; acl = []});
+            value = "" })
+
   (* The 'path operations' are the ones which can be done in transactions.
      The other operations are always done outside any current transaction. *)
-  let pathop path op v = match op with
+  let pathop domid perms path op v = match op with
   | Request.Read ->
     V.read v path >>|= fun node ->
     return (`Ok (Response.Read node.Node.value, nothing))
@@ -101,10 +96,10 @@ module Make(V: VIEW) = struct
     V.rm v path >>|= fun node ->
     return (`Ok (Response.Rm, nothing))
 
-  let reply_or_fail hdr req = match req with
+  let reply_or_fail domid perms hdr req = match req with
   | Request.PathOp (path, op) ->
     let path = Path.of_string path in
-    with_transaction hdr (pathop path op)
+    with_transaction hdr (pathop domid perms path op)
   | Request.Getdomainpath domid ->
     return (`Ok (Response.Getdomainpath (Printf.sprintf "/local/domain/%d" domid), nothing))
   | Request.Transaction_start ->
@@ -127,7 +122,7 @@ module Make(V: VIEW) = struct
   | _ ->
     return (`Not_implemented (Op.to_string hdr.Header.ty))
 
-  let reply hdr req =
+  let reply domid perms hdr req =
     debug "<-  rid %ld tid %ld %s"
       hdr.Header.rid hdr.Header.tid
       (Sexp.to_string (Request.sexp_of_t req));
@@ -137,7 +132,7 @@ module Make(V: VIEW) = struct
 
     Lwt.catch
       (fun () ->
-        reply_or_fail hdr req >>= function
+        reply_or_fail domid perms hdr req >>= function
         | `Ok x -> return (x, None)
         | `Enoent path -> errorwith ~error_info:(Some (Path.to_string path)) "ENOENT"
         | `Not_implemented fn -> errorwith ~error_info:(Some fn) "EINVAL"

@@ -24,10 +24,6 @@ let debug fmt = Logging.debug "server" fmt
 let info fmt  = Logging.info "server" fmt
 let error fmt = Logging.error "server" fmt
 
-let fail_on_error = function
-| `Ok x -> return x
-| `Error x -> fail (Failure x)
-
 module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
 
   type channel_state = {
@@ -40,10 +36,10 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
 
   let handle_connection t =
     T.address_of t >>= fun address ->
-    let dom = T.domain_of t in
+    let domid = T.domain_of t in
 
     V.create () >>= fun v ->
-    C.create v (address, dom) >>= fun c ->
+    C.create v (address, domid) >>= fun c ->
     let special_path name = [ "tool"; "xenstored"; name; (match Uri.scheme address with Some x -> x | None -> "unknown"); string_of_int (C.index c) ] in
 
     (* If this is a restart, there will be an existing side_effects entry.
@@ -59,7 +55,7 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
     let effects = ref initial_state in
 
     let origin = Printf.sprintf "Accepted connection %d from domain %d over %s"
-      (C.index c) dom (match Uri.scheme address with None -> "unknown protocol" | Some x -> x) in
+      (C.index c) domid (match Uri.scheme address with None -> "unknown protocol" | Some x -> x) in
 
     V.merge v origin >>= fun ok ->
     if not ok then error "Failed to commit the connection transaction";
@@ -113,6 +109,7 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
         let side_effects = Transaction.(side_effects ++ e) in
         Lwt_list.iter_s Introduce.introduce (Transaction.get_domains r.side_effects) >>= fun () ->
 *)
+        let perms = C.perms c in
 (*
         let origin =
           Printf.sprintf "Resynchronising state for connection %d domain %d"
@@ -136,7 +133,7 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
 (*
             E.reply v (Some limits) perm c hdr request >>= fun (response, side_effects) ->
 *)
-            E.reply hdr request >>= fun (response, side_effects) ->
+            E.reply domid perms hdr request >>= fun (response, side_effects) ->
             return (response, side_effects, read_ofs)
           | read_ofs, `Error msg ->
 					  (* quirk: if this is a NULL-termination error then it should be EINVAL *)
@@ -159,12 +156,12 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
           effects := { next_read_ofs; next_write_ofs };
 
           let origin = Printf.sprintf "Transaction from connection %d domain %d"
-              (C.index c) dom in
+              (C.index c) domid in
         loop () in
 			loop ()
 		with e ->
       info "Closing connection %d to domain %d: %s"
-        (C.index c) dom (Printexc.to_string e);
+        (C.index c) domid (Printexc.to_string e);
     (*
 			Lwt.cancel background_watch_event_flusher;
       Mount.unmount connection_path >>= fun e1 ->
@@ -172,7 +169,7 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
       V.create () >>= fun v ->
 			C.destroy v c >>= fun () ->
       V.merge v (Printf.sprintf "Closing connection %d to domain %d\n\nException was: %s"
-        (C.index c) dom (Printexc.to_string e)) >>= fun ok ->
+        (C.index c) domid (Printexc.to_string e)) >>= fun ok ->
       if not ok then error "Failed to commit closing connection transaction";
       (*
       PEffects.destroy peffects >>= fun e3 ->

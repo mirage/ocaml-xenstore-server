@@ -20,7 +20,7 @@ Library xenstored
   Pack:               true
   Path:               server
   Findlibname:        xenstored
-  Modules:            Logging, Persistence, Introduce, Connection, Server, Effects
+  Modules:            Logging, Error, Perms, Persistence, Introduce, Connection, Server, Effects
   BuildDepends:       lwt, xenstore, irmin, irmin.backend, irmin.unix, git, sexplib
 
 # For backwards compat

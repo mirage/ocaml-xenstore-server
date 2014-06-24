@@ -25,8 +25,14 @@ module Make(V: VIEW): sig
   val create: V.t -> (Uri.t * int) -> t Lwt.t
 
   val index: t -> int
+  (** a unique id associated with a connection *)
+
+  val perms: t -> Perms.t
+  (** The premissions associated with a connection *)
 
   val destroy: V.t -> t -> unit Lwt.t
+  (** [destroy v t] destroys any connection associated with [t] *)
+
 end
 
 (*
@@ -48,7 +54,6 @@ val by_address: (Uri.t, t) Hashtbl.t
 (** an index of all currently open connections *)
 
 val index: t -> int
-(** a unique id associated with a connection *)
 
 val domainpath: t -> Protocol.Name.t
 (** The default domain directory associated with a connection *)
@@ -59,8 +64,6 @@ val domid: t -> int
 val address: t -> Uri.t
 (** The address associated with a connection *)
 
-val perm: t -> PPerms.t
-(** The premissions associated with a connection *)
 
 val watch_events: t -> Watch_events.t
 (** A connection's watch event queue *)
@@ -105,7 +108,6 @@ val incr_nb_ops: t -> unit
 val mark_symbols: t -> unit
 
 val destroy: Uri.t -> 'view Transaction.side_effects Lwt.t
-(** [destroy address] destroys any connection associated with [address] *)
 
 val create: (Uri.t * int) -> (t * 'view Transaction.side_effects) Lwt.t
 (** [create (address, domid)] creates a connection associated with [address]

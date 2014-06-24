@@ -25,12 +25,18 @@ module Watch = struct
 end
 
 module Make(V: VIEW) = struct
-  type t = unit
+  type t = {
+    domid: int;
+    perms: Perms.t;
+  }
 
-  let create v (uri, dom) =
-    return ()
+  let create v (uri, domid) =
+    let perms = Perms.of_domain domid in
+    return { domid; perms }
 
   let index _ = -1
+
+  let perms t = t.perms
 
   let destroy v t =
     return ()
