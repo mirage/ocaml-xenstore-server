@@ -42,12 +42,19 @@ module Make(V: VIEW) = struct
 
   let transactions = Hashtbl.create 16
 
+  let next_transaction_id =
+    let next = ref 1l in
+    fun () ->
+      let this = !next in
+      next := Int32.succ !next;
+      this
+
   let with_transaction hdr f =
     if hdr.Header.tid = 0l then begin
       (* XXX: this shouldn't be allowed to generate conflicts *)
       V.create () >>= fun v ->
       f v >>|= fun (response, side_effects) ->
-      V.merge v "with_transaction" >>= fun () ->
+      V.merge v "without transaction" >>= fun () ->
       return (`Ok (response, side_effects))
     end else begin
       let v = Hashtbl.find transactions hdr.Header.tid in
@@ -90,6 +97,20 @@ module Make(V: VIEW) = struct
     with_transaction hdr (pathop path op)
   | Request.Getdomainpath domid ->
     return (`Ok (Response.Getdomainpath (Printf.sprintf "/local/domain/%d" domid), nothing))
+  | Request.Transaction_start ->
+    V.create () >>= fun v ->
+    let tid = next_transaction_id () in
+    Hashtbl.replace transactions tid v;
+    return (`Ok (Response.Transaction_start tid, nothing))
+  | Request.Transaction_end commit ->
+    let v = Hashtbl.find transactions hdr.Header.tid in
+    Hashtbl.remove transactions hdr.Header.tid;
+    if commit then begin
+      V.merge v "transaction_commit" >>= fun () ->
+      return (`Ok (Response.Transaction_end, nothing))
+    end else begin
+      return (`Ok (Response.Transaction_end, nothing))
+    end
   | _ ->
     return (`Not_implemented (Op.to_string hdr.Header.ty))
 
