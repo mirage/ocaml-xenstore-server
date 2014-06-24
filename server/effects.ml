@@ -41,14 +41,15 @@ module Make(V: VIEW) = struct
       next := Int32.succ !next;
       this
 
-  let with_transaction hdr f =
+  let with_transaction domid hdr req f =
     if hdr.Header.tid = 0l then begin
+      let origin = Printf.sprintf "Domain %d: merging %s" domid (Protocol.Request.to_string req) in
       let rec retry counter =
         V.create () >>= fun v ->
         f v >>|= fun (response, side_effects) ->
         (* No locks are held so this merge might conflict with a parallel
            transaction. We retry forever assuming this is rare. *)
-        V.merge v "without transaction" >>= function
+        V.merge v origin >>= function
         | true ->
           return (`Ok (response, side_effects))
         | false ->
@@ -94,7 +95,7 @@ module Make(V: VIEW) = struct
   let reply_or_fail domid perms hdr req = match req with
   | Request.PathOp (path, op) ->
     let path = Path.of_string path in
-    with_transaction hdr (pathop domid perms path op)
+    with_transaction domid hdr req (pathop domid perms path op)
   | Request.Getdomainpath domid ->
     return (`Ok (Response.Getdomainpath (Printf.sprintf "/local/domain/%d" domid), nothing))
   | Request.Transaction_start ->
@@ -106,7 +107,8 @@ module Make(V: VIEW) = struct
     let v = Hashtbl.find transactions hdr.Header.tid in
     Hashtbl.remove transactions hdr.Header.tid;
     if commit then begin
-      V.merge v "transaction_commit" >>= function
+      let origin = Printf.sprintf "Domain %d: merging transaction %ld" domid hdr.Header.tid in
+      V.merge v origin >>= function
       | true ->
         return (`Ok (Response.Transaction_end, nothing))
       | false ->

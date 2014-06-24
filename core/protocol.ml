@@ -591,6 +591,27 @@ module Request = struct
   | Isintroduced of int
   with sexp
 
+  let to_string = function
+  | PathOp(path, Read) -> "read " ^ path
+  | PathOp(path, Directory) -> "directory " ^ path
+  | PathOp(path, Getperms) -> "getperms " ^ path
+  | PathOp(path, Write v) -> "write " ^ path ^ " <- " ^ v
+  | PathOp(path, Mkdir) -> "mkdir " ^ path
+  | PathOp(path, Rm) -> "rm " ^ path
+  | PathOp(path, Setperms v) -> "setperms " ^ path ^ " <- " ^ (ACL.to_string v)
+  | Getdomainpath x -> "getdomainpath " ^ (string_of_int x)
+  | Transaction_start -> "transaction_start"
+  | Watch(path, tok) -> "watch " ^ path ^ " " ^ tok
+  | Unwatch(path, tok) -> "unwatch " ^ path ^ " " ^ tok
+  | Transaction_end b -> "transaction_end " ^ (string_of_bool b)
+  | Debug xs -> "debug"
+  | Introduce (domid, mfn, port) -> Printf.sprintf "introduce %d %nu %d" domid mfn port
+  | Resume x -> "resume " ^ (string_of_int x)
+  | Release x -> "release " ^ (string_of_int x)
+  | Set_target (a, b) -> "set_target " ^ (string_of_int a) ^ " <- " ^ (string_of_int b)
+  | Restrict x -> "restrict " ^ (string_of_int x)
+  | Isintroduced x -> "isintroduced " ^ (string_of_int x)
+
   let get_ty = function
   | PathOp(_, Directory) -> Op.Directory
   | PathOp(_, Read) -> Op.Read

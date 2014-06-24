@@ -178,7 +178,7 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
   fail_on_error (V.write v Protocol.Path.empty Node.({ creator = 0;
                                                        perms = Protocol.ACL.({ owner = 0; other = NONE; acl = []});
                                                        value = "" })) >>= fun () ->
-  V.merge v "Adding root node" >>= fun ok ->
+  V.merge v "Adding root node\n\nA xenstore tree always has a root node, owned by domain 0." >>= fun ok ->
   ( if not ok then fail (Failure "Failed to merge transaction writing the root node") else return () ) >>= fun () ->
   let module UnixServer = Server.Make(Sockets)(V) in
   let module DomainServer = Server.Make(Interdomain)(V) in
