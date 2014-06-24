@@ -167,10 +167,10 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
     let merge t origin =
       let origin = IrminOrigin.create "%s" origin in
       DB.View.merge_path ~origin db [] t >>= function
-      | `Ok () -> return ()
+      | `Ok () -> return true
       | `Conflict msg ->
-        error "Conflict while merging database view: %s (this shouldn't happen, all backend transactions are serialised)" msg;
-        return ()
+        info "Conflict while merging database view: %s" msg;
+        return false
   end in
 
   let module UnixServer = Server.Make(Sockets)(V) in

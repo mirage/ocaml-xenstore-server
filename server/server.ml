@@ -61,7 +61,8 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
     let origin = Printf.sprintf "Accepted connection %d from domain %d over %s"
       (C.index c) dom (match Uri.scheme address with None -> "unknown protocol" | Some x -> x) in
 
-    V.merge v origin >>= fun () ->
+    V.merge v origin >>= fun ok ->
+    if not ok then error "Failed to commit the connection transaction";
 
     (* Hold this mutex when writing to the output channel: *)
     let write_m = Lwt_mutex.create () in
@@ -171,7 +172,8 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
       V.create () >>= fun v ->
 			C.destroy v c >>= fun () ->
       V.merge v (Printf.sprintf "Closing connection %d to domain %d\n\nException was: %s"
-        (C.index c) dom (Printexc.to_string e)) >>= fun () ->
+        (C.index c) dom (Printexc.to_string e)) >>= fun ok ->
+      if not ok then error "Failed to commit closing connection transaction";
       (*
       PEffects.destroy peffects >>= fun e3 ->
       Quota.remove dom >>= fun e4 ->

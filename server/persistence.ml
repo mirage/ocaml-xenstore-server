@@ -37,5 +37,5 @@ module type VIEW = sig
 
   val rm: t -> Protocol.Path.t -> [ `Ok of unit ] Lwt.t
 
-  val merge: t -> string -> unit Lwt.t
+  val merge: t -> string -> bool Lwt.t
 end

@@ -17,7 +17,8 @@ exception Not_implemented of string
 let (>>|=) m f = m >>= function
   | `Ok x -> f x
   | `Enoent _
-  | `Not_implemented _ as e -> return e
+  | `Not_implemented _
+  | `Conflict as e -> return e
 
 module Make(V: VIEW) = struct
 
@@ -51,11 +52,20 @@ module Make(V: VIEW) = struct
 
   let with_transaction hdr f =
     if hdr.Header.tid = 0l then begin
-      (* XXX: this shouldn't be allowed to generate conflicts *)
-      V.create () >>= fun v ->
-      f v >>|= fun (response, side_effects) ->
-      V.merge v "without transaction" >>= fun () ->
-      return (`Ok (response, side_effects))
+      let rec retry counter =
+        V.create () >>= fun v ->
+        f v >>|= fun (response, side_effects) ->
+        (* No locks are held so this merge might conflict with a parallel
+           transaction. We retry forever assuming this is rare. *)
+        V.merge v "without transaction" >>= function
+        | true ->
+          return (`Ok (response, side_effects))
+        | false ->
+          if counter mod 1000 = 0
+          then error "rid %ld tid %ld failed to merge after %d attempts"
+            hdr.Header.rid hdr.Header.tid counter;
+          retry (counter + 1) in
+      retry 0
     end else begin
       let v = Hashtbl.find transactions hdr.Header.tid in
       f v
@@ -106,8 +116,11 @@ module Make(V: VIEW) = struct
     let v = Hashtbl.find transactions hdr.Header.tid in
     Hashtbl.remove transactions hdr.Header.tid;
     if commit then begin
-      V.merge v "transaction_commit" >>= fun () ->
-      return (`Ok (Response.Transaction_end, nothing))
+      V.merge v "transaction_commit" >>= function
+      | true ->
+        return (`Ok (Response.Transaction_end, nothing))
+      | false ->
+        return `Conflict
     end else begin
       return (`Ok (Response.Transaction_end, nothing))
     end
@@ -128,6 +141,7 @@ module Make(V: VIEW) = struct
         | `Ok x -> return (x, None)
         | `Enoent path -> errorwith ~error_info:(Some (Path.to_string path)) "ENOENT"
         | `Not_implemented fn -> errorwith ~error_info:(Some fn) "EINVAL"
+        | `Conflict -> errorwith "EAGAIN"
       )
       (fun e ->
         match e with
