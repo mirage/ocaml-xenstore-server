@@ -49,10 +49,11 @@ module Make(V: VIEW) = struct
 
   let with_transaction domid hdr req f =
     if hdr.Header.tid = 0l then begin
-      let origin = Printf.sprintf "Domain %d: merging %s" domid (Protocol.Request.to_string req) in
       let rec retry counter =
         V.create () >>= fun v ->
         f v >>|= fun (response, side_effects) ->
+        let origin = Printf.sprintf "Domain %d: %s = %s" domid
+          (Protocol.Request.to_string req) (Protocol.Response.to_string response) in
         (* No locks are held so this merge might conflict with a parallel
            transaction. We retry forever assuming this is rare. *)
         V.merge v origin >>= function

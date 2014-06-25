@@ -267,6 +267,9 @@ module Response : sig
   with sexp
   (** the body of a response *)
 
+  val to_string: t -> string
+  (** [to_string t] returns a short human-readable description of [t] *)
+
   val get_ty: t -> Op.t
   (** [get_ty t] returns the operation code corresponding to [t] *)
 

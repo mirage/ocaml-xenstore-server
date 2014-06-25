@@ -483,6 +483,29 @@ module Response = struct
   | Watchevent of Name.t * string
   with sexp
 
+  let to_string = function
+  | Read x -> x
+  | Directory xs -> Printf.sprintf "[ %s ]" (String.concat "; " xs)
+  | Getperms x -> ACL.to_string x
+  | Getdomainpath x -> x
+  | Transaction_start x -> Int32.to_string x
+  | Write
+  | Mkdir
+  | Rm
+  | Setperms
+  | Watch
+  | Unwatch
+  | Transaction_end -> "()"
+  | Debug xs -> Printf.sprintf "[ %s ]" (String.concat "; " xs)
+  | Introduce
+  | Resume
+  | Release
+  | Set_target
+  | Restrict -> "()"
+  | Isintroduced x -> string_of_bool x
+  | Error x -> "Error " ^ x
+  | Watchevent(name, token) -> Name.to_string name ^ ":" ^ token
+
   let get_ty = function
   | Read _ -> Op.Read
   | Directory _ -> Op.Directory
