@@ -219,7 +219,7 @@ module Reader = struct
   type t = connection
 
   let rec next t =
-    let seq, available = Xenstore_ring.Ring.Back.read_prepare t.ring in
+    let seq, available = Xenstore_ring.Ring.Back.Reader.read t.ring in
     let available_bytes = Cstruct.len available in
     if available_bytes = 0 then begin
       Lwt_condition.wait t.c >>= fun () ->
@@ -227,7 +227,7 @@ module Reader = struct
     end else return (Int64.of_int32 seq, available)
 
   let ack t seq =
-    Xenstore_ring.Ring.Back.read_commit t.ring (Int64.to_int32 seq);
+    Xenstore_ring.Ring.Back.Reader.advance t.ring (Int64.to_int32 seq);
     Eventchn.(notify (init ()) (of_int t.port));
     return ()
 end
@@ -239,7 +239,7 @@ let read t buf =
     else if t.shutdown
     then fail Ring_shutdown
     else
-      let seq, available = Xenstore_ring.Ring.Back.read_prepare t.ring in
+      let seq, available = Xenstore_ring.Ring.Back.Reader.read t.ring in
       let available_bytes = Cstruct.len available in
       if available_bytes = 0 then begin
         Lwt_condition.wait t.c >>= fun () ->
@@ -247,7 +247,7 @@ let read t buf =
       end else begin
         let consumable = min (Cstruct.len buf) available_bytes in
         Cstruct.blit available 0 buf 0 consumable;
-        Xenstore_ring.Ring.Back.read_commit t.ring Int32.(add seq (of_int consumable));
+        Xenstore_ring.Ring.Back.Reader.advance t.ring Int32.(add seq (of_int consumable));
         Eventchn.(notify (init ()) (of_int t.port));
         loop (Cstruct.shift buf consumable)
       end in
@@ -256,7 +256,7 @@ let read t buf =
 module Writer = struct
   type t = connection
   let rec next t =
-    let seq, available = Xenstore_ring.Ring.Back.write_prepare t.ring in
+    let seq, available = Xenstore_ring.Ring.Back.Writer.write t.ring in
     let available_bytes = Cstruct.len available in
     if available_bytes = 0 then begin
       Lwt_condition.wait t.c >>= fun () ->
@@ -264,7 +264,7 @@ module Writer = struct
     end else return (Int64.of_int32 seq, available)
 
   let ack t seq =
-    Xenstore_ring.Ring.Back.write_commit t.ring (Int64.to_int32 seq);
+    Xenstore_ring.Ring.Back.Writer.advance t.ring (Int64.to_int32 seq);
     Eventchn.(notify (init ()) (of_int t.port));
     return ()
 end
@@ -276,7 +276,7 @@ let write t buf =
     else if t.shutdown
     then fail Ring_shutdown
     else
-      let seq, available = Xenstore_ring.Ring.Back.write_prepare t.ring in
+      let seq, available = Xenstore_ring.Ring.Back.Writer.write t.ring in
       let available_bytes = Cstruct.len available in
       if available_bytes = 0 then begin
         Lwt_condition.wait t.c >>= fun () ->
@@ -284,7 +284,7 @@ let write t buf =
       end else begin
         let consumable = min (Cstruct.len buf) available_bytes in
         Cstruct.blit buf 0 available 0 consumable;
-        Xenstore_ring.Ring.Back.write_commit t.ring Int32.(add seq (of_int consumable));
+        Xenstore_ring.Ring.Back.Writer.advance t.ring Int32.(add seq (of_int consumable));
         Eventchn.(notify (init ()) (of_int t.port));
         loop (Cstruct.shift buf consumable)
       end in
