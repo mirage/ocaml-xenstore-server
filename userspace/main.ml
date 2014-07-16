@@ -104,12 +104,14 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
     let dir_suffix = ".dir"
     let value_suffix = ".value"
 
+    let root = "/"
+
     let value_of_filename path = match List.rev (Protocol.Path.to_string_list path) with
-    | [] -> []
-    | file :: dirs -> List.rev ((file ^ value_suffix) :: (List.map (fun x -> x ^ dir_suffix) dirs))
+    | [] -> [ root ]
+    | file :: dirs -> root :: (List.rev ((file ^ value_suffix) :: (List.map (fun x -> x ^ dir_suffix) dirs)))
 
     let dir_of_filename path =
-      List.rev (List.map (fun x -> x ^ dir_suffix) (List.rev (Protocol.Path.to_string_list path)))
+      root :: (List.rev (List.map (fun x -> x ^ dir_suffix) (List.rev (Protocol.Path.to_string_list path))))
 
     let remove_suffix suffix x =
       let suffix' = String.length suffix and x' = String.length x in
