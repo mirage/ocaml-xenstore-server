@@ -483,13 +483,8 @@ let main () =
 
 	lwt client = make () in
 
-	lwt t = time (fun () -> sequential n client) in
-    lwt () = Lwt_io.write Lwt_io.stdout (Printf.sprintf "%d sequential starts and shutdowns: %.02f\n" n t) in
-
 	lwt t = time (fun () -> parallel n client) in
     lwt () = Lwt_io.write Lwt_io.stdout (Printf.sprintf "%d parallel starts and shutdowns: %.02f\n" n t) in
-	lwt t = time (fun () -> query 1000 n client) in
-    lwt () = Lwt_io.write Lwt_io.stdout (Printf.sprintf "%d read queries per %d VMs: %.02f\n" 1000 n t) in
 
 	return ()
  end
