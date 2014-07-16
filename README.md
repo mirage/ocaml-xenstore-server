@@ -1,10 +1,13 @@
-This repo contains:
-  1. a xenstore client library, a merge of the Mirage and XCP ones
-  2. a xenstore server library
-  3. a xenstore server instance which runs under Unix with libxc
-  4. a xenstore server instance which runs on mirage.
+Mirage Xenstore server
+======================
 
-The client and the server libraries have sets of unit-tests.
+This repo contains an experimental Xenstore server implementation which uses Mirage
+and [Irmin](https://github.com/mirage/irmin).
+
+The design goals are: (in priority order)
+  1. to survive crashes/unexpected restarts
+  2. to make system debugging easy
+  3. to run very fast
 
 Notes on persistence modes
 ==========================
