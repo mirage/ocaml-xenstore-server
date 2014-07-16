@@ -91,7 +91,7 @@ Executable oxenstored
   Install:            false
   CSources:           domains_stubs.c
   CClib:              -lxenctrl
-  BuildDepends:       lwt, lwt.unix, xenstore, xenstore.unix, xenstored, cmdliner, shared-memory-ring, shared-memory-ring.xenstore, xen-evtchn, xen-evtchn.unix, xen-evtchn.unix.activations, io-page, io-page.unix
+  BuildDepends:       lwt, lwt.unix, xenstore, xenstore.unix, xenstored, cmdliner, shared-memory-ring (>= 1.1.0), shared-memory-ring.xenstore, xen-evtchn, xen-evtchn.unix, xen-evtchn.unix.activations, io-page, io-page.unix
 
 Executable xs
   CompiledObject:     best
