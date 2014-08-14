@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: ffdd0de56d5e6e6fbe9658068c9a07fe) *)
+(* DO NOT EDIT (digest: b6e2e443dc7c1a85a73a24aae3fb02e1) *)
 module OASISGettext = struct
 (* # 22 "src/oasis/OASISGettext.ml" *)
 
@@ -599,21 +599,10 @@ let package_default =
        [
           ("xenstore", ["core"], []);
           ("xenstored", ["server"], []);
-          ("xenstore_client", ["core"], []);
           ("xenstore_unix", ["unix"], [])
        ];
-     lib_c = [("oxenstored", "userspace", []); ("dbgring", "userspace", [])];
-     flags =
-       [
-          (["oasis_executable_oxenstored_cclib"; "link"],
-            [(OASISExpr.EBool true, S [A "-cclib"; A "-lxenctrl"])]);
-          (["oasis_executable_oxenstored_cclib"; "ocamlmklib"; "c"],
-            [(OASISExpr.EBool true, S [A "-lxenctrl"])]);
-          (["oasis_executable_dbgring_cclib"; "link"],
-            [(OASISExpr.EBool true, S [A "-cclib"; A "-lxenctrl"])]);
-          (["oasis_executable_dbgring_cclib"; "ocamlmklib"; "c"],
-            [(OASISExpr.EBool true, S [A "-lxenctrl"])])
-       ];
+     lib_c = [];
+     flags = [];
      includes =
        [
           ("userspace", ["core"; "server"; "unix"]);
@@ -628,6 +617,6 @@ let package_default =
 
 let dispatch_default = MyOCamlbuildBase.dispatch_default package_default;;
 
-# 632 "myocamlbuild.ml"
+# 621 "myocamlbuild.ml"
 (* OASIS_STOP *)
 Ocamlbuild_plugin.dispatch dispatch_default;;

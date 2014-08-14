@@ -24,11 +24,11 @@ Library xenstored
   BuildDepends:       lwt, xenstore, irmin, irmin.backend, irmin.unix, git, sexplib
 
 # For backwards compat
-Library xenstore_client
-  CompiledObject:     best
-  Path:               core
-  Findlibname:        client
-  Findlibparent:      xenstore
+#Library xenstore_client
+#  CompiledObject:     best
+#  Path:               core
+#  Findlibname:        client
+#  Findlibparent:      xenstore
 
 Library xenstore_unix
   CompiledObject:     best
@@ -89,9 +89,7 @@ Executable oxenstored
   MainIs:             main.ml
   Custom:             true
   Install:            false
-  CSources:           domains_stubs.c
-  CClib:              -lxenctrl
-  BuildDepends:       lwt, lwt.unix, xenstore, xenstore.unix, xenstored, cmdliner, shared-memory-ring (>= 1.1.0), shared-memory-ring.xenstore, xen-evtchn, xen-evtchn.unix, xen-evtchn.unix.activations, io-page, io-page.unix
+  BuildDepends:       lwt, lwt.unix, xenstore, xenstore.unix, xenstored, cmdliner, shared-memory-ring (>= 1.1.0), shared-memory-ring.xenstore, xen-evtchn, io-page, io-page.unix
 
 Executable xs
   CompiledObject:     best
@@ -109,15 +107,15 @@ Executable bench
   Install:            false
   BuildDepends:       lwt, lwt.unix, xenstore, xenstore.unix
 
-Executable dbgring
-  CompiledObject:     best
-  Path:               userspace
-  MainIs:             dbgring.ml
-  Custom:             true
-  Install:            false
-  CSources:           domains_stubs.c
-  CClib:              -lxenctrl
-  BuildDepends:       lwt, lwt.unix, xenstore, xenstore.unix, xenstored, cmdliner, shared-memory-ring, shared-memory-ring.xenstore, xen-evtchn, xen-evtchn.unix, xen-evtchn.unix.activations, io-page, io-page.unix
+#Executable dbgring
+#  CompiledObject:     best
+#  Path:               userspace
+#  MainIs:             dbgring.ml
+#  Custom:             true
+#  Install:            false
+#  CSources:           domains_stubs.c
+#  CClib:              -lxenctrl
+#  BuildDepends:       lwt, lwt.unix, xenstore, xenstore.unix, xenstored, cmdliner, shared-memory-ring, shared-memory-ring.xenstore, xen-evtchn, xen-evtchn.unix, xen-evtchn.unix.activations, io-page, io-page.unix
 
 #Document api
 #  Title: Documentation and API reference

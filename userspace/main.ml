@@ -183,8 +183,9 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
   V.merge v "Adding root node\n\nA xenstore tree always has a root node, owned by domain 0." >>= fun ok ->
   ( if not ok then fail (Failure "Failed to merge transaction writing the root node") else return () ) >>= fun () ->
   let module UnixServer = Server.Make(Sockets)(V) in
+  (*
   let module DomainServer = Server.Make(Interdomain)(V) in
-
+  *)
   lwt () = if not enable_xen && (not enable_unix) then begin
     error "You must specify at least one transport (--enable-unix and/or --enable-xen)";
     fail (Failure "no transports specified")
@@ -233,10 +234,11 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
         fail e
     end else return () in
   let (b: unit Lwt.t) =
+    (*
     if enable_xen then begin
       info "Starting server on xen inter-domain transport";
       DomainServer.serve_forever ()
-    end else return () in
+    end else *) return () in
   Introduce.(introduce { Domain.domid = 0; mfn = 0n; remote_port = 0 }) >>= fun () ->
   debug "Introduced domain 0";
   lwt () = a in
