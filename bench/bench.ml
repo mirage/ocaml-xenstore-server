@@ -427,29 +427,29 @@ let sequential n client : unit Lwt.t =
 	Lwt_list.iter_s
 		(fun domid ->
 		   vm_cycle domid client
-		) (between 0 n)
+		) (between 1 (n + 1))
 
 let parallel n client =
 	Lwt_list.iter_p
 		(fun domid ->
 			vm_cycle domid client
-		) (between 0 n)
+		) (between 1 (n + 1))
 
 let query m n client =
 	lwt () = Lwt_list.iter_s
 	(fun domid ->
 		vm_start domid client
-	) (between 0 n) in
+	) (between 1 (n + 1)) in
 	lwt () = for_lwt i = 0 to m do
 		Lwt_list.iter_p
 		(fun domid ->
 			immediate client (fun xs -> lwt _ = read xs (Printf.sprintf "%s/local/domain/%d/name" prefix domid) in return ())
-		) (between 0 n)
+		) (between 1 (n + 1))
 	done in
 	lwt () = Lwt_list.iter_s
 	(fun domid ->
 		vm_shutdown domid client
-	) (between 0 n) in
+	) (between 1 (n + 1)) in
 	return ()
 
 
