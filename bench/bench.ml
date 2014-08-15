@@ -145,7 +145,7 @@ let backend_error_path_of_device (x: device) client =
 
 (** Location of the frontend in xenstore *)
 let frontend_path_of_device (x: device) client =
-	lwt dom_path = getdomainpath x.backend.domid client in
+	lwt dom_path = getdomainpath x.frontend.domid client in
 	return (Printf.sprintf "%s/device/%s/%d"
 		dom_path
 		(string_of_kind x.frontend.kind)
