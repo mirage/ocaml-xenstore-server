@@ -391,8 +391,8 @@ let vm_shutdown domid client =
 
 let vm_start domid client =
 	let vbd devid = {
-		Device.frontend = { Device.domid = domid; kind = Device.Vbd; devid = 0 };
-		backend = { Device.domid = 0; kind = Device.Vbd; devid = 0 }
+		Device.frontend = { Device.domid = domid; kind = Device.Vbd; devid };
+		backend = { Device.domid = 0; kind = Device.Vbd; devid }
 	} in
 	lwt () = Domain.make domid client in
 	Lwt_list.iter_s (fun d -> Device.add d client) [ vbd 0; vbd 1; vbd 2 ]
