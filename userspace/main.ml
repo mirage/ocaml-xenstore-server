@@ -181,8 +181,12 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
       DB.View.merge_path ~origin db [] t.v >>= function
       | `Ok () -> return true
       | `Conflict msg ->
-        info "Conflict while merging database view: %s: [ %s ]." msg (String.concat "; " (List.rev t.debug));
-        return false
+        info "Conflict while merging database view: %s: [ %s ]. Attempting a rebase." msg (String.concat "; " (List.rev t.debug));
+        (DB.View.rebase_path ~origin db [] t.v >>= function
+        | `Ok () -> return true
+        | `Conflict msg ->
+          info "Conflict while rebasing database view: %s: [%s]. Asking client to retry" msg (String.concat "; " (List.rev t.debug));
+          return false)
   end in
 
   (* Create the root node *)
