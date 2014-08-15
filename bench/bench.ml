@@ -401,6 +401,23 @@ let vm_cycle domid client =
 	lwt () = vm_start domid client in
 	vm_shutdown domid client
 
+let initial_setup client =
+  let paths = [
+    prefix ^ "/local/domain";
+    prefix ^ "/vm";
+    prefix ^ "/vss";
+    Device.private_path;
+  ] in
+  let rwperm = Protocol.ACL.({owner = 0; other = NONE; acl = []}) in
+  transaction client
+    (fun xs ->
+      rm xs prefix >>= fun () ->
+      Lwt_list.iter_s (fun path ->
+        mkdir xs path >>= fun () ->
+        setperms xs path rwperm
+      ) paths
+    )
+
 let rec between start finish =
 	if start > finish
 	then []
@@ -482,6 +499,7 @@ let main () =
 		| Some n -> int_of_string n in
 
 	lwt client = make () in
+  initial_setup client >>= fun () ->
 
 	lwt t = time (fun () -> parallel n client) in
     lwt () = Lwt_io.write Lwt_io.stdout (Printf.sprintf "%d parallel starts and shutdowns: %.02f\n" n t) in
