@@ -302,7 +302,7 @@ let make domid client =
 				) [ "device"; "error"; "drivers"; "control"; "attr"; "data"; "messages"; "vm-data" ] in
 				return ()
 		) in
-	lwt () = immediate client
+	lwt () = transaction client
 		(fun xs ->
 
 			lwt () = Lwt_list.iter_s (fun (x, y) -> write xs (dom_path ^ "/" ^ x) y) xsdata in
@@ -416,7 +416,8 @@ let initial_setup client =
         mkdir xs path >>= fun () ->
         setperms xs path rwperm
       ) paths
-    )
+    ) >>= fun () ->
+  vm_start 0 client
 
 let rec between start finish =
 	if start > finish
