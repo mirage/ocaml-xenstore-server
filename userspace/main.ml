@@ -114,7 +114,6 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
   let module V = struct
     type t = {
       v: DB.View.t;
-      mutable debug: string list;
     }
 
     let dir_suffix = ".dir"
@@ -138,22 +137,17 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
 
     let create () =
       DB.View.of_path db [] >>= fun v ->
-      return { v; debug = [] }
+      return { v }
     let mem t path =
-      t.debug <- ("mem " ^ (Protocol.Path.to_string path)) :: t.debug;
       (try_lwt
         DB.View.mem t.v (value_of_filename path)
        with e -> (error "%s" (Printexc.to_string e); return false))
     let write t path contents =
-      t.debug <- ("write " ^ (Protocol.Path.to_string path)) :: t.debug;
-      debug "+ %s" (Protocol.Path.to_string path);
       (try_lwt
         DB.View.update t.v (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents)) >>= fun () ->
         return (`Ok ())
       with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
     let list t path =
-      t.debug <- ("ls " ^ (Protocol.Path.to_string path)) :: t.debug;
-      debug "ls %s" (Protocol.Path.to_string path);
       (try_lwt
         (* TODO: differentiate a directory which doesn't exist from an empty directory
         DB.View.read (value_of_filename path) >>= function
@@ -175,15 +169,12 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
       with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
 
     let rm t path =
-      t.debug <- ("rm " ^ (Protocol.Path.to_string path)) :: t.debug;
-      debug "- %s" (Protocol.Path.to_string path);
       (try_lwt
         DB.View.remove t.v (dir_of_filename path) >>= fun () ->
         DB.View.remove t.v (value_of_filename path) >>= fun () ->
         return (`Ok ())
       with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
     let read t path =
-      t.debug <- ("read " ^ (Protocol.Path.to_string path)) :: t.debug;
       (try_lwt
         DB.View.read t.v (value_of_filename path) >>= function
         | None -> return (`Enoent path)
@@ -195,7 +186,7 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
           DB.View.merge_path ~origin db [] t.v >>= function
           | `Ok () -> return true
           | `Conflict msg ->
-            info "Conflict while merging database view: %s: [ %s ]. Attempting a rebase." msg (String.concat "; " (List.rev t.debug));
+            info "Conflict while merging database view: %s. Attempting a rebase." msg;
             return false
         end else return false )
       >>= function
@@ -204,7 +195,7 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
         DB.View.rebase_path ~origin db [] t.v >>= function
         | `Ok () -> return true
         | `Conflict msg ->
-          info "Conflict while rebasing database view: %s: [%s]. Asking client to retry" msg (String.concat "; " (List.rev t.debug));
+          info "Conflict while rebasing database view: %s. Asking client to retry" msg;
           return false
   end in
 
