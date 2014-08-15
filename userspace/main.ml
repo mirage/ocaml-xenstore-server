@@ -83,21 +83,30 @@ let ensure_directory_exists dir_needed =
       fail (Failure "directory does not exist")
     end else return ()
 
-let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
-  ( match irmin_path with
-    | None ->
-      error "Please specify a database path";
-      fail (Failure "path not found")
-    | Some x -> return x ) >>= fun path ->
+module type DB_S = Irmin.S
+  with type Block.key = IrminKey.SHA1.t
+    and type value = string
+    and type branch = string
 
+let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
   let open Irmin_unix in
+  ( match irmin_path with
+  | None ->
+    info "No database provided: will use an in-memory database";
+    let module Mem = IrminMemory.Fresh(struct end) in
+    let module DB = Mem.Make(IrminKey.SHA1)(IrminContents.String)(IrminTag.String) in
+    return (module DB: DB_S)
+  | Some x ->
     let module Git = IrminGit.FS(struct
-      let root = Some path
+      let root = Some x
       let bare = true
     end) in
     let module DB = Git.Make(IrminKey.SHA1)(IrminContents.String)(IrminTag.String) in
-    DB.create () >>= fun db ->
+    return (module DB: DB_S)
+  ) >>= fun db_m ->
+  let module DB = (val db_m: DB_S) in
 
+    DB.create () >>= fun db ->
   let module V = struct
     type t = {
       v: DB.View.t;
