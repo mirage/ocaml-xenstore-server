@@ -77,6 +77,10 @@ let irmin_path =
   let doc = "Persist xenstore database writes to the specified Irminsule database path" in
   Arg.(value & opt (some string) None & info [ "database" ] ~docv:"DATABASE" ~doc)
 
+let prefer_merge =
+  let doc = "Prefer to generate merge commits (default is to always rebase transactions)" in
+  Arg.(value & flag & info [ "prefer-merge"] ~docv:"PREFER-MERGE" ~doc)
+
 let ensure_directory_exists dir_needed =
     if not(Sys.file_exists dir_needed && (Sys.is_directory dir_needed)) then begin
       error "The directory (%s) doesn't exist.\n" dir_needed;
@@ -88,7 +92,7 @@ module type DB_S = Irmin.S
     and type value = string
     and type branch = string
 
-let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
+let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_merge () =
   let open Irmin_unix in
   ( match irmin_path with
   | None ->
@@ -187,19 +191,26 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
        with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
     let merge t origin =
       let origin = IrminOrigin.create "%s" origin in
-      DB.View.merge_path ~origin db [] t.v >>= function
-      | `Ok () -> return true
-      | `Conflict msg ->
-        info "Conflict while merging database view: %s: [ %s ]. Attempting a rebase." msg (String.concat "; " (List.rev t.debug));
-        (DB.View.rebase_path ~origin db [] t.v >>= function
+      ( if prefer_merge then begin
+          DB.View.merge_path ~origin db [] t.v >>= function
+          | `Ok () -> return true
+          | `Conflict msg ->
+            info "Conflict while merging database view: %s: [ %s ]. Attempting a rebase." msg (String.concat "; " (List.rev t.debug));
+            return false
+        end else return false )
+      >>= function
+      | true -> return true
+      | false ->
+        DB.View.rebase_path ~origin db [] t.v >>= function
         | `Ok () -> return true
         | `Conflict msg ->
           info "Conflict while rebasing database view: %s: [%s]. Asking client to retry" msg (String.concat "; " (List.rev t.debug));
-          return false)
+          return false
   end in
 
   (* Create the root node *)
   V.create () >>= fun v ->
+
   fail_on_error (V.write v Protocol.Path.empty Node.({ creator = 0;
                                                        perms = Protocol.ACL.({ owner = 0; other = NONE; acl = []});
                                                        value = "" })) >>= fun () ->
@@ -280,15 +291,15 @@ let with_logging daemon program_thread =
   shutdown_logger ();
   l_t
 
-let program pidfile daemon path enable_xen enable_unix irmin_path=
+let program pidfile daemon path enable_xen enable_unix irmin_path prefer_merge=
   Sockets.xenstored_socket := path;
   if daemon then Lwt_daemon.daemonize ();
   try
-    Lwt_main.run (with_logging daemon (program_thread daemon path pidfile enable_xen enable_unix irmin_path))
+    Lwt_main.run (with_logging daemon (program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_merge))
   with e ->
     exit 1
 
-let program_t = Term.(pure program $ pidfile $ daemon $ path $ enable_xen $ enable_unix $ irmin_path)
+let program_t = Term.(pure program $ pidfile $ daemon $ path $ enable_xen $ enable_unix $ irmin_path $ prefer_merge)
 
 let info =
   let doc = "User-space xenstore server" in
