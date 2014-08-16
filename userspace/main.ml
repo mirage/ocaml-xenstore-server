@@ -77,29 +77,44 @@ let irmin_path =
   let doc = "Persist xenstore database writes to the specified Irminsule database path" in
   Arg.(value & opt (some string) None & info [ "database" ] ~docv:"DATABASE" ~doc)
 
+let prefer_merge =
+  let doc = "Prefer to generate merge commits (default is to always rebase transactions)" in
+  Arg.(value & flag & info [ "prefer-merge"] ~docv:"PREFER-MERGE" ~doc)
+
 let ensure_directory_exists dir_needed =
     if not(Sys.file_exists dir_needed && (Sys.is_directory dir_needed)) then begin
       error "The directory (%s) doesn't exist.\n" dir_needed;
       fail (Failure "directory does not exist")
     end else return ()
 
-let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
-  ( match irmin_path with
-    | None ->
-      error "Please specify a database path";
-      fail (Failure "path not found")
-    | Some x -> return x ) >>= fun path ->
+module type DB_S = Irmin.S
+  with type Block.key = IrminKey.SHA1.t
+    and type value = string
+    and type branch = string
 
+let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_merge () =
   let open Irmin_unix in
+  ( match irmin_path with
+  | None ->
+    info "No database provided: will use an in-memory database";
+    let module Mem = IrminMemory.Fresh(struct end) in
+    let module DB = Mem.Make(IrminKey.SHA1)(IrminContents.String)(IrminTag.String) in
+    return (module DB: DB_S)
+  | Some x ->
     let module Git = IrminGit.FS(struct
-      let root = Some path
+      let root = Some x
       let bare = true
     end) in
     let module DB = Git.Make(IrminKey.SHA1)(IrminContents.String)(IrminTag.String) in
-    DB.create () >>= fun db ->
+    return (module DB: DB_S)
+  ) >>= fun db_m ->
+  let module DB = (val db_m: DB_S) in
 
+    DB.create () >>= fun db ->
   let module V = struct
-    type t = DB.View.t
+    type t = {
+      v: DB.View.t;
+    }
 
     let dir_suffix = ".dir"
     let value_suffix = ".value"
@@ -120,26 +135,26 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
       let suffix' = String.length suffix and x' = String.length x in
       suffix' <= x' && (String.sub x (x' - suffix') suffix' = suffix)
 
-    let create () = DB.View.of_path db []
+    let create () =
+      DB.View.of_path db [] >>= fun v ->
+      return { v }
     let mem t path =
       (try_lwt
-        DB.View.mem t (value_of_filename path)
+        DB.View.mem t.v (value_of_filename path)
        with e -> (error "%s" (Printexc.to_string e); return false))
     let write t path contents =
-      debug "+ %s" (Protocol.Path.to_string path);
       (try_lwt
-        DB.View.update t (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents)) >>= fun () ->
+        DB.View.update t.v (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents)) >>= fun () ->
         return (`Ok ())
       with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
     let list t path =
-      debug "ls %s" (Protocol.Path.to_string path);
       (try_lwt
         (* TODO: differentiate a directory which doesn't exist from an empty directory
         DB.View.read (value_of_filename path) >>= function
         | None -> return (`Enoent path)
         | Some _ ->
         *)
-          DB.View.list t [ dir_of_filename path ] >>= fun keys ->
+          DB.View.list t.v [ dir_of_filename path ] >>= fun keys ->
           let union x xs = if not(List.mem x xs) then x :: xs else xs in
           return (`Ok (List.fold_left (fun acc x -> match (List.rev x) with
             | basename :: _ ->
@@ -154,37 +169,48 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
       with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
 
     let rm t path =
-      debug "- %s" (Protocol.Path.to_string path);
       (try_lwt
-        DB.View.remove t (dir_of_filename path) >>= fun () ->
-        DB.View.remove t (value_of_filename path) >>= fun () ->
+        DB.View.remove t.v (dir_of_filename path) >>= fun () ->
+        DB.View.remove t.v (value_of_filename path) >>= fun () ->
         return (`Ok ())
       with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
     let read t path =
       (try_lwt
-        DB.View.read t (value_of_filename path) >>= function
+        DB.View.read t.v (value_of_filename path) >>= function
         | None -> return (`Enoent path)
         | Some x -> return (`Ok (Node.contents_of_sexp (Sexp.of_string x)))
        with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
     let merge t origin =
       let origin = IrminOrigin.create "%s" origin in
-      DB.View.merge_path ~origin db [] t >>= function
-      | `Ok () -> return true
-      | `Conflict msg ->
-        info "Conflict while merging database view: %s" msg;
-        return false
+      ( if prefer_merge then begin
+          DB.View.merge_path ~origin db [] t.v >>= function
+          | `Ok () -> return true
+          | `Conflict msg ->
+            info "Conflict while merging database view: %s. Attempting a rebase." msg;
+            return false
+        end else return false )
+      >>= function
+      | true -> return true
+      | false ->
+        DB.View.rebase_path ~origin db [] t.v >>= function
+        | `Ok () -> return true
+        | `Conflict msg ->
+          info "Conflict while rebasing database view: %s. Asking client to retry" msg;
+          return false
   end in
 
   (* Create the root node *)
   V.create () >>= fun v ->
+
   fail_on_error (V.write v Protocol.Path.empty Node.({ creator = 0;
                                                        perms = Protocol.ACL.({ owner = 0; other = NONE; acl = []});
                                                        value = "" })) >>= fun () ->
   V.merge v "Adding root node\n\nA xenstore tree always has a root node, owned by domain 0." >>= fun ok ->
   ( if not ok then fail (Failure "Failed to merge transaction writing the root node") else return () ) >>= fun () ->
   let module UnixServer = Server.Make(Sockets)(V) in
+  (*
   let module DomainServer = Server.Make(Interdomain)(V) in
-
+  *)
   lwt () = if not enable_xen && (not enable_unix) then begin
     error "You must specify at least one transport (--enable-unix and/or --enable-xen)";
     fail (Failure "no transports specified")
@@ -233,10 +259,11 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path () =
         fail e
     end else return () in
   let (b: unit Lwt.t) =
+    (*
     if enable_xen then begin
       info "Starting server on xen inter-domain transport";
       DomainServer.serve_forever ()
-    end else return () in
+    end else *) return () in
   Introduce.(introduce { Domain.domid = 0; mfn = 0n; remote_port = 0 }) >>= fun () ->
   debug "Introduced domain 0";
   lwt () = a in
@@ -255,15 +282,15 @@ let with_logging daemon program_thread =
   shutdown_logger ();
   l_t
 
-let program pidfile daemon path enable_xen enable_unix irmin_path=
+let program pidfile daemon path enable_xen enable_unix irmin_path prefer_merge=
   Sockets.xenstored_socket := path;
   if daemon then Lwt_daemon.daemonize ();
   try
-    Lwt_main.run (with_logging daemon (program_thread daemon path pidfile enable_xen enable_unix irmin_path))
+    Lwt_main.run (with_logging daemon (program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_merge))
   with e ->
     exit 1
 
-let program_t = Term.(pure program $ pidfile $ daemon $ path $ enable_xen $ enable_unix $ irmin_path)
+let program_t = Term.(pure program $ pidfile $ daemon $ path $ enable_xen $ enable_unix $ irmin_path $ prefer_merge)
 
 let info =
   let doc = "User-space xenstore server" in

@@ -207,6 +207,7 @@ let int_of_file_descr fd =
 let address_of { fd } =
 	let creds = Lwt_unix.get_credentials fd in
 	let pid = creds.Lwt_unix.cred_pid in
+        try_lwt
 	lwt cmdline =
 			Lwt_io.with_file ~mode:Lwt_io.input
 				(Printf.sprintf "/proc/%d/cmdline" pid)
@@ -224,6 +225,8 @@ let address_of { fd } =
 	let basename = Filename.basename filename in
 	let name = Printf.sprintf "%d:%s:%d" pid basename (int_of_file_descr fd) in
 	return (Uri.make ~scheme:"unix" ~path:name ())
+        with _ ->
+                return (Uri.make ~scheme:"unix" ~path:(string_of_int pid) ())
 
 let domain_of _ = 0
 

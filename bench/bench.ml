@@ -145,7 +145,7 @@ let backend_error_path_of_device (x: device) client =
 
 (** Location of the frontend in xenstore *)
 let frontend_path_of_device (x: device) client =
-	lwt dom_path = getdomainpath x.backend.domid client in
+	lwt dom_path = getdomainpath x.frontend.domid client in
 	return (Printf.sprintf "%s/device/%s/%d"
 		dom_path
 		(string_of_kind x.frontend.kind)
@@ -302,7 +302,7 @@ let make domid client =
 				) [ "device"; "error"; "drivers"; "control"; "attr"; "data"; "messages"; "vm-data" ] in
 				return ()
 		) in
-	lwt () = immediate client
+	lwt () = transaction client
 		(fun xs ->
 
 			lwt () = Lwt_list.iter_s (fun (x, y) -> write xs (dom_path ^ "/" ^ x) y) xsdata in
@@ -391,8 +391,8 @@ let vm_shutdown domid client =
 
 let vm_start domid client =
 	let vbd devid = {
-		Device.frontend = { Device.domid = domid; kind = Device.Vbd; devid = 0 };
-		backend = { Device.domid = 0; kind = Device.Vbd; devid = 0 }
+		Device.frontend = { Device.domid = domid; kind = Device.Vbd; devid };
+		backend = { Device.domid = 0; kind = Device.Vbd; devid }
 	} in
 	lwt () = Domain.make domid client in
 	Lwt_list.iter_s (fun d -> Device.add d client) [ vbd 0; vbd 1; vbd 2 ]
@@ -400,6 +400,24 @@ let vm_start domid client =
 let vm_cycle domid client =
 	lwt () = vm_start domid client in
 	vm_shutdown domid client
+
+let initial_setup client =
+  let paths = [
+    prefix ^ "/local/domain";
+    prefix ^ "/vm";
+    prefix ^ "/vss";
+    Device.private_path;
+  ] in
+  let rwperm = Protocol.ACL.({owner = 0; other = NONE; acl = []}) in
+  transaction client
+    (fun xs ->
+      rm xs prefix >>= fun () ->
+      Lwt_list.iter_s (fun path ->
+        mkdir xs path >>= fun () ->
+        setperms xs path rwperm
+      ) paths
+    ) >>= fun () ->
+  vm_start 0 client
 
 let rec between start finish =
 	if start > finish
@@ -410,29 +428,29 @@ let sequential n client : unit Lwt.t =
 	Lwt_list.iter_s
 		(fun domid ->
 		   vm_cycle domid client
-		) (between 0 n)
+		) (between 1 (n + 1))
 
 let parallel n client =
 	Lwt_list.iter_p
 		(fun domid ->
 			vm_cycle domid client
-		) (between 0 n)
+		) (between 1 (n + 1))
 
 let query m n client =
 	lwt () = Lwt_list.iter_s
 	(fun domid ->
 		vm_start domid client
-	) (between 0 n) in
+	) (between 1 (n + 1)) in
 	lwt () = for_lwt i = 0 to m do
 		Lwt_list.iter_p
 		(fun domid ->
 			immediate client (fun xs -> lwt _ = read xs (Printf.sprintf "%s/local/domain/%d/name" prefix domid) in return ())
-		) (between 0 n)
+		) (between 1 (n + 1))
 	done in
 	lwt () = Lwt_list.iter_s
 	(fun domid ->
 		vm_shutdown domid client
-	) (between 0 n) in
+	) (between 1 (n + 1)) in
 	return ()
 
 
@@ -482,6 +500,7 @@ let main () =
 		| Some n -> int_of_string n in
 
 	lwt client = make () in
+  initial_setup client >>= fun () ->
 
 	lwt t = time (fun () -> parallel n client) in
     lwt () = Lwt_io.write Lwt_io.stdout (Printf.sprintf "%d parallel starts and shutdowns: %.02f\n" n t) in
