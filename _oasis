@@ -13,7 +13,7 @@ Library xenstore
   Path:               core
   Findlibname:        xenstore
   Modules:            Protocol, Handle, Client, S
-  BuildDepends:       lwt, cstruct (>= 0.6.0), cstruct.syntax, uri, sexplib
+  BuildDepends:       lwt, lwt.syntax, cstruct (>= 0.6.0), cstruct.syntax, uri, sexplib
 
 Library xenstored
   CompiledObject:     best
@@ -83,6 +83,14 @@ Test server_test
   Command:            $server_test
   WorkingDirectory:   server_test
 
+#Library ostubs
+#  CompiledObject:     best
+#  Path:               userspace
+#  Modules:            Domains
+#  CSources:           domains_stubs.c
+#  CClib:              -lxenctrl
+#  BuildDepends:       lwt, lwt.unix, xenstore
+
 Executable oxenstored
   CompiledObject:     best
   Path:               userspace
@@ -106,16 +114,6 @@ Executable bench
   Custom:             true
   Install:            false
   BuildDepends:       lwt, lwt.unix, xenstore, xenstore.unix
-
-#Executable dbgring
-#  CompiledObject:     best
-#  Path:               userspace
-#  MainIs:             dbgring.ml
-#  Custom:             true
-#  Install:            false
-#  CSources:           domains_stubs.c
-#  CClib:              -lxenctrl
-#  BuildDepends:       lwt, lwt.unix, xenstore, xenstore.unix, xenstored, cmdliner, shared-memory-ring, shared-memory-ring.xenstore, xen-evtchn, xen-evtchn.unix, xen-evtchn.unix.activations, io-page, io-page.unix
 
 #Document api
 #  Title: Documentation and API reference

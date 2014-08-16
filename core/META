@@ -1,8 +1,8 @@
 # OASIS_START
-# DO NOT EDIT (digest: 3ab327fd75388f8033e86f6de9cecebd)
+# DO NOT EDIT (digest: 8d41ff98fdd2a0a8e458e2bcc2172706)
 version = "1.2.5"
 description = "Xenstore protocol library"
-requires = "lwt cstruct cstruct.syntax uri sexplib"
+requires = "lwt lwt.syntax cstruct cstruct.syntax uri sexplib"
 archive(byte) = "xenstore.cma"
 archive(byte, plugin) = "xenstore.cma"
 archive(native) = "xenstore.cmxa"

@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 72d440637e2bdb8020f08fe851e411eb)
+# DO NOT EDIT (digest: fa2feb5b6ffb2afba7499b7fab5a4fcd)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -22,6 +22,7 @@
 <core/*.ml{,i}>: pkg_cstruct
 <core/*.ml{,i}>: pkg_cstruct.syntax
 <core/*.ml{,i}>: pkg_lwt
+<core/*.ml{,i}>: pkg_lwt.syntax
 <core/*.ml{,i}>: pkg_sexplib
 <core/*.ml{,i}>: pkg_uri
 # Library xenstored
@@ -41,6 +42,7 @@
 <server/*.ml{,i}>: pkg_irmin.backend
 <server/*.ml{,i}>: pkg_irmin.unix
 <server/*.ml{,i}>: pkg_lwt
+<server/*.ml{,i}>: pkg_lwt.syntax
 <server/*.ml{,i}>: pkg_sexplib
 <server/*.ml{,i}>: pkg_uri
 <server/*.ml{,i}>: use_xenstore
@@ -49,6 +51,7 @@
 <unix/*.ml{,i}>: pkg_cstruct
 <unix/*.ml{,i}>: pkg_cstruct.syntax
 <unix/*.ml{,i}>: pkg_lwt
+<unix/*.ml{,i}>: pkg_lwt.syntax
 <unix/*.ml{,i}>: pkg_lwt.unix
 <unix/*.ml{,i}>: pkg_sexplib
 <unix/*.ml{,i}>: pkg_uri
@@ -57,6 +60,7 @@
 <core_test/core_test.{native,byte}>: pkg_cstruct
 <core_test/core_test.{native,byte}>: pkg_cstruct.syntax
 <core_test/core_test.{native,byte}>: pkg_lwt
+<core_test/core_test.{native,byte}>: pkg_lwt.syntax
 <core_test/core_test.{native,byte}>: pkg_lwt.unix
 <core_test/core_test.{native,byte}>: pkg_oUnit
 <core_test/core_test.{native,byte}>: pkg_sexplib
@@ -65,6 +69,7 @@
 <core_test/*.ml{,i}>: pkg_cstruct
 <core_test/*.ml{,i}>: pkg_cstruct.syntax
 <core_test/*.ml{,i}>: pkg_lwt
+<core_test/*.ml{,i}>: pkg_lwt.syntax
 <core_test/*.ml{,i}>: pkg_lwt.unix
 <core_test/*.ml{,i}>: pkg_oUnit
 <core_test/*.ml{,i}>: pkg_sexplib
@@ -82,6 +87,7 @@
 <userspace/main.{native,byte}>: pkg_irmin.backend
 <userspace/main.{native,byte}>: pkg_irmin.unix
 <userspace/main.{native,byte}>: pkg_lwt
+<userspace/main.{native,byte}>: pkg_lwt.syntax
 <userspace/main.{native,byte}>: pkg_lwt.unix
 <userspace/main.{native,byte}>: pkg_sexplib
 <userspace/main.{native,byte}>: pkg_shared-memory-ring
@@ -101,6 +107,7 @@
 <userspace/*.ml{,i}>: pkg_irmin.backend
 <userspace/*.ml{,i}>: pkg_irmin.unix
 <userspace/*.ml{,i}>: pkg_lwt
+<userspace/*.ml{,i}>: pkg_lwt.syntax
 <userspace/*.ml{,i}>: pkg_lwt.unix
 <userspace/*.ml{,i}>: pkg_sexplib
 <userspace/*.ml{,i}>: pkg_shared-memory-ring
@@ -115,6 +122,7 @@
 <cli/cli.{native,byte}>: pkg_cstruct
 <cli/cli.{native,byte}>: pkg_cstruct.syntax
 <cli/cli.{native,byte}>: pkg_lwt
+<cli/cli.{native,byte}>: pkg_lwt.syntax
 <cli/cli.{native,byte}>: pkg_lwt.unix
 <cli/cli.{native,byte}>: pkg_sexplib
 <cli/cli.{native,byte}>: pkg_uri
@@ -123,6 +131,7 @@
 <cli/*.ml{,i}>: pkg_cstruct
 <cli/*.ml{,i}>: pkg_cstruct.syntax
 <cli/*.ml{,i}>: pkg_lwt
+<cli/*.ml{,i}>: pkg_lwt.syntax
 <cli/*.ml{,i}>: pkg_lwt.unix
 <cli/*.ml{,i}>: pkg_sexplib
 <cli/*.ml{,i}>: pkg_uri
@@ -133,6 +142,7 @@
 <bench/bench.{native,byte}>: pkg_cstruct
 <bench/bench.{native,byte}>: pkg_cstruct.syntax
 <bench/bench.{native,byte}>: pkg_lwt
+<bench/bench.{native,byte}>: pkg_lwt.syntax
 <bench/bench.{native,byte}>: pkg_lwt.unix
 <bench/bench.{native,byte}>: pkg_sexplib
 <bench/bench.{native,byte}>: pkg_uri
@@ -141,6 +151,7 @@
 <bench/*.ml{,i}>: pkg_cstruct
 <bench/*.ml{,i}>: pkg_cstruct.syntax
 <bench/*.ml{,i}>: pkg_lwt
+<bench/*.ml{,i}>: pkg_lwt.syntax
 <bench/*.ml{,i}>: pkg_lwt.unix
 <bench/*.ml{,i}>: pkg_sexplib
 <bench/*.ml{,i}>: pkg_uri
@@ -156,26 +167,26 @@ true: annot
 <server_test/binary.ml>: pkg_lwt.syntax
 <userspace/*.ml>: pkg_lwt.syntax
 <core/client.ml>: pkg_lwt.syntax
-<core/protocol.ml>: pkg_sexplib.syntax
-<core/protocol.mli>: pkg_sexplib.syntax
-<server/node.ml>: pkg_sexplib.syntax
-<server/node.mli>: pkg_sexplib.syntax
+<core/protocol.ml>: pkg_sexplib.syntax, syntax_camlp4o
+<core/protocol.mli>: pkg_sexplib.syntax, syntax_camlp4o
+<server/node.ml>: pkg_sexplib.syntax, syntax_camlp4o
+<server/node.mli>: pkg_sexplib.syntax, syntax_camlp4o
 <server/quota.ml>: pkg_sexplib.syntax
 <server/quota.mli>: pkg_sexplib.syntax
 <server/store.ml>: pkg_sexplib.syntax
 <server/store.mli>: pkg_sexplib.syntax
-<server/symbol.ml>: pkg_sexplib.syntax
-<server/symbol.mli>: pkg_sexplib.syntax
-<server/connection.ml>: pkg_sexplib.syntax
-<server/connection.mli>: pkg_sexplib.syntax
+<server/symbol.ml>: pkg_sexplib.syntax, syntax_camlp4o
+<server/symbol.mli>: pkg_sexplib.syntax, syntax_camlp4o
+<server/connection.ml>: pkg_sexplib.syntax, syntax_camlp4o
+<server/connection.mli>: pkg_sexplib.syntax, syntax_camlp4o
 <server/transaction.ml{,i}>: pkg_sexplib.syntax
-<server/domain.ml{,i}>: pkg_sexplib.syntax
+<server/domain.ml{,i}>: pkg_sexplib.syntax, syntax_camlp4o
 <server/pRef.ml>: pkg_sexplib.syntax
 <server/pBinReader.ml>: pkg_sexplib.syntax
 <server/pBinWriter.ml>: pkg_sexplib.syntax
 <server/limits.ml{,i}>: pkg_sexplib.syntax
-<server/perms.ml>: pkg_sexplib.syntax
-<server/perms.mli>: pkg_sexplib.syntax
+<server/perms.ml>: pkg_sexplib.syntax, syntax_camlp4o
+<server/perms.mli>: pkg_sexplib.syntax, syntax_camlp4o
 <server/logging_interface.ml>: pkg_sexplib.syntax
 <server/server.ml>: pkg_sexplib.syntax
 <cli/*.ml>: pkg_lwt.syntax
