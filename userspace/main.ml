@@ -88,32 +88,32 @@ let ensure_directory_exists dir_needed =
     end else return ()
 
 module type DB_S = Irmin.S
-  with type Block.key = IrminKey.SHA1.t
-    and type value = string
-    and type branch = string
+  with type key = Irmin.Contents.String.Path.t
+   and type value = string
 
 let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_merge () =
   let open Irmin_unix in
   ( match irmin_path with
   | None ->
     info "No database provided: will use an in-memory database";
-    let module Mem = IrminMemory.Fresh(struct end) in
-    let module DB = Mem.Make(IrminKey.SHA1)(IrminContents.String)(IrminTag.String) in
-    return (module DB: DB_S)
+    let module DB =
+      Irmin_mem.Make(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
+    let config = Irmin_mem.config () in
+    return (config, (module DB: DB_S))
   | Some x ->
-    let module Git = IrminGit.FS(struct
-      let root = Some x
-      let bare = true
-    end) in
-    let module DB = Git.Make(IrminKey.SHA1)(IrminContents.String)(IrminTag.String) in
-    return (module DB: DB_S)
-  ) >>= fun db_m ->
+    let module DB =
+      Irmin_git.FS(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
+    let config = Irmin_git.config ~root:x ~bare:true () in
+    return (config, (module DB: DB_S))
+  ) >>= fun (config, db_m) ->
   let module DB = (val db_m: DB_S) in
 
-    DB.create () >>= fun db ->
+  DB.create config Irmin_unix.task >>= fun db ->
+  (* view is no longer embedded in S_MAKER *)
+  let module DB_View = Irmin.View(DB) in
   let module V = struct
     type t = {
-      v: DB.View.t;
+      v: DB_View.t;
     }
 
     let dir_suffix = ".dir"
@@ -136,15 +136,15 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
       suffix' <= x' && (String.sub x (x' - suffix') suffix' = suffix)
 
     let create () =
-      DB.View.of_path db [] >>= fun v ->
+      DB_View.of_path (db "") [] >>= fun v ->
       return { v }
     let mem t path =
       (try_lwt
-        DB.View.mem t.v (value_of_filename path)
+        DB_View.mem t.v (value_of_filename path)
        with e -> (error "%s" (Printexc.to_string e); return false))
     let write t path contents =
       (try_lwt
-        DB.View.update t.v (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents)) >>= fun () ->
+        DB_View.update t.v (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents)) >>= fun () ->
         return (`Ok ())
       with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
     let list t path =
@@ -154,7 +154,7 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
         | None -> return (`Enoent path)
         | Some _ ->
         *)
-          DB.View.list t.v [ dir_of_filename path ] >>= fun keys ->
+          DB_View.list t.v (dir_of_filename path) >>= fun keys ->
           let union x xs = if not(List.mem x xs) then x :: xs else xs in
           return (`Ok (List.fold_left (fun acc x -> match (List.rev x) with
             | basename :: _ ->
@@ -170,20 +170,19 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
 
     let rm t path =
       (try_lwt
-        DB.View.remove t.v (dir_of_filename path) >>= fun () ->
-        DB.View.remove t.v (value_of_filename path) >>= fun () ->
+        DB_View.remove t.v (dir_of_filename path) >>= fun () ->
+        DB_View.remove t.v (value_of_filename path) >>= fun () ->
         return (`Ok ())
       with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
     let read t path =
       (try_lwt
-        DB.View.read t.v (value_of_filename path) >>= function
+        DB_View.read t.v (value_of_filename path) >>= function
         | None -> return (`Enoent path)
         | Some x -> return (`Ok (Node.contents_of_sexp (Sexp.of_string x)))
        with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
-    let merge t origin =
-      let origin = IrminOrigin.create "%s" origin in
+    let merge t msg =
       ( if prefer_merge then begin
-          DB.View.merge_path ~origin db [] t.v >>= function
+            DB_View.merge_path (db msg) [] t.v >>= function
           | `Ok () -> return true
           | `Conflict msg ->
             info "Conflict while merging database view: %s. Attempting a rebase." msg;
@@ -192,7 +191,7 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
       >>= function
       | true -> return true
       | false ->
-        DB.View.rebase_path ~origin db [] t.v >>= function
+        DB_View.rebase_path (db msg) [] t.v >>= function
         | `Ok () -> return true
         | `Conflict msg ->
           info "Conflict while rebasing database view: %s. Asking client to retry" msg;
@@ -205,7 +204,8 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
   fail_on_error (V.write v Protocol.Path.empty Node.({ creator = 0;
                                                        perms = Protocol.ACL.({ owner = 0; other = NONE; acl = []});
                                                        value = "" })) >>= fun () ->
-  V.merge v "Adding root node\n\nA xenstore tree always has a root node, owned by domain 0." >>= fun ok ->
+  V.merge v "Adding root node\n\nA xenstore tree always has a root node, owned
+  by domain 0." >>= fun ok ->
   ( if not ok then fail (Failure "Failed to merge transaction writing the root node") else return () ) >>= fun () ->
   let module UnixServer = Server.Make(Sockets)(V) in
   (*
