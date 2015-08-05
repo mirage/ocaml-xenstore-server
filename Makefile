@@ -29,6 +29,8 @@ install: setup.bin
 
 uninstall: setup.bin
 	@./setup.bin -uninstall
+	ocamlfind remove xenstored
+	ocamlfind remove xenstore
 
 # oasis bug?
 #test: setup.bin build
