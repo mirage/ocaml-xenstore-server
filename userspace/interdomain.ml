@@ -200,7 +200,7 @@ let from_address address =
     set_buffer_offset input 0L;
     set_buffer_length input 0;
 
-    let ring = Cstruct.of_bigarray page in
+    let ring = Io_page.to_cstruct page in
     let d = {
       address; page; ring; port; input; output;
       c = Lwt_condition.create ();

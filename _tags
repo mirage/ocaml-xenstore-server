@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 7a8349b30153c9c7bcfc09f7f5fb4587)
+# DO NOT EDIT (digest: 6327933a663b0f4c13e6c90ba780cac8)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -77,6 +77,7 @@ true: annot, bin_annot
 <core_test/*.ml{,i,y}>: use_xenstore
 <core_test/core_test.{native,byte}>: custom
 # Executable oxenstored
+<userspace/main.{native,byte}>: use_liboxenstored_stubs
 <userspace/main.{native,byte}>: pkg_cmdliner
 <userspace/main.{native,byte}>: pkg_cstruct
 <userspace/main.{native,byte}>: pkg_cstruct.syntax
@@ -93,6 +94,8 @@ true: annot, bin_annot
 <userspace/main.{native,byte}>: pkg_shared-memory-ring.xenstore
 <userspace/main.{native,byte}>: pkg_uri
 <userspace/main.{native,byte}>: pkg_xen-evtchn
+<userspace/main.{native,byte}>: pkg_xen-evtchn.unix
+<userspace/main.{native,byte}>: pkg_xen-evtchn.unix.activations
 <userspace/main.{native,byte}>: use_xenstore
 <userspace/main.{native,byte}>: use_xenstore_unix
 <userspace/main.{native,byte}>: use_xenstored
@@ -112,9 +115,32 @@ true: annot, bin_annot
 <userspace/*.ml{,i,y}>: pkg_shared-memory-ring.xenstore
 <userspace/*.ml{,i,y}>: pkg_uri
 <userspace/*.ml{,i,y}>: pkg_xen-evtchn
+<userspace/*.ml{,i,y}>: pkg_xen-evtchn.unix
+<userspace/*.ml{,i,y}>: pkg_xen-evtchn.unix.activations
 <userspace/*.ml{,i,y}>: use_xenstore
 <userspace/*.ml{,i,y}>: use_xenstore_unix
 <userspace/*.ml{,i,y}>: use_xenstored
+"userspace/domains_stubs.c": pkg_cmdliner
+"userspace/domains_stubs.c": pkg_cstruct
+"userspace/domains_stubs.c": pkg_cstruct.syntax
+"userspace/domains_stubs.c": pkg_git
+"userspace/domains_stubs.c": pkg_io-page
+"userspace/domains_stubs.c": pkg_io-page.unix
+"userspace/domains_stubs.c": pkg_irmin
+"userspace/domains_stubs.c": pkg_irmin.unix
+"userspace/domains_stubs.c": pkg_lwt
+"userspace/domains_stubs.c": pkg_lwt.syntax
+"userspace/domains_stubs.c": pkg_lwt.unix
+"userspace/domains_stubs.c": pkg_sexplib
+"userspace/domains_stubs.c": pkg_shared-memory-ring
+"userspace/domains_stubs.c": pkg_shared-memory-ring.xenstore
+"userspace/domains_stubs.c": pkg_uri
+"userspace/domains_stubs.c": pkg_xen-evtchn
+"userspace/domains_stubs.c": pkg_xen-evtchn.unix
+"userspace/domains_stubs.c": pkg_xen-evtchn.unix.activations
+"userspace/domains_stubs.c": use_xenstore
+"userspace/domains_stubs.c": use_xenstore_unix
+"userspace/domains_stubs.c": use_xenstored
 <userspace/main.{native,byte}>: custom
 # Executable xs
 <cli/cli.{native,byte}>: pkg_cstruct

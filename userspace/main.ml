@@ -208,9 +208,7 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
   by domain 0." >>= fun ok ->
   ( if not ok then fail (Failure "Failed to merge transaction writing the root node") else return () ) >>= fun () ->
   let module UnixServer = Server.Make(Sockets)(V) in
-  (*
   let module DomainServer = Server.Make(Interdomain)(V) in
-  *)
   lwt () = if not enable_xen && (not enable_unix) then begin
     error "You must specify at least one transport (--enable-unix and/or --enable-xen)";
     fail (Failure "no transports specified")
