@@ -97,7 +97,8 @@ Executable oxenstored
   MainIs:             main.ml
   Custom:             true
   Install:            false
-  BuildDepends:       lwt, lwt.unix, xenstore, xenstore.unix, xenstored, cmdliner, shared-memory-ring (>= 1.1.0), shared-memory-ring.xenstore, xen-evtchn, io-page, io-page.unix
+  CSources:           domains_stubs.c
+  BuildDepends:       lwt, lwt.unix, xenstore, xenstore.unix, xenstored, cmdliner, shared-memory-ring (>= 1.1.0), shared-memory-ring.xenstore, xen-evtchn, xen-evtchn.unix, xen-evtchn.unix.activations, io-page, io-page.unix
 
 Executable xs
   CompiledObject:     best
