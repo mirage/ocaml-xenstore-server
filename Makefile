@@ -27,7 +27,7 @@ doc: setup.data setup.bin
 install: setup.bin
 	@./setup.bin -install
 
-uninstall: setup.bin
+uninstall: setup.data
 	@./setup.bin -uninstall
 	ocamlfind remove xenstored
 	ocamlfind remove xenstore
