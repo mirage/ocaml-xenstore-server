@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: 272b031d85c71c3acb8f6892cf1ac1b1) *)
+(* DO NOT EDIT (digest: 136e1bd0975739ca0af945bc8055d588) *)
 module OASISGettext = struct
 (* # 22 "src/oasis/OASISGettext.ml" *)
 
@@ -613,7 +613,7 @@ let package_default =
           ("xenstored", ["server"], []);
           ("xenstore_unix", ["unix"], [])
        ];
-     lib_c = [];
+     lib_c = [("oxenstored", "userspace", [])];
      flags = [];
      includes =
        [
