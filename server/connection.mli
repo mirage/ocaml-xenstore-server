@@ -18,7 +18,7 @@ module Watch : sig
   type t = Protocol.Name.t * string with sexp
 end
 
-module Make(V: VIEW): sig
+module Make(V: PERSISTENCE): sig
 
   type t
 

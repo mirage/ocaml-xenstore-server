@@ -22,7 +22,7 @@ let ( ++ ) f g x = f (g x)
 let debug fmt = Logging.debug "persistence" fmt
 let error fmt = Logging.error "persistence" fmt
 
-module type VIEW = sig
+module type PERSISTENCE = sig
   type t
 
   val create: unit -> t Lwt.t

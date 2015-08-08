@@ -15,7 +15,7 @@ let nothing = ()
 
 exception Not_implemented of string
 
-module Make(V: VIEW) = struct
+module Make(V: PERSISTENCE) = struct
 
   (* Every write or mkdir will recursively create parent nodes if they
      don't already exist. *)

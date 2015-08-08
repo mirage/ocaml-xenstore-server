@@ -24,7 +24,7 @@ let debug fmt = Logging.debug "server" fmt
 let info fmt  = Logging.info "server" fmt
 let error fmt = Logging.error "server" fmt
 
-module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
+module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
 
   type channel_state = {
     next_read_ofs: T.offset;                  (* the next byte to read *)

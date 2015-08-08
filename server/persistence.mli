@@ -14,7 +14,7 @@
 
 open Xenstore
 
-module type VIEW = sig
+module type PERSISTENCE = sig
   type t
 
   val create: unit -> t Lwt.t

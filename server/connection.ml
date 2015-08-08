@@ -24,7 +24,7 @@ module Watch = struct
   type t = Protocol.Name.t * string with sexp
 end
 
-module Make(V: VIEW) = struct
+module Make(V: PERSISTENCE) = struct
   type t = {
     domid: int;
     perms: Perms.t;
