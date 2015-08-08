@@ -175,7 +175,6 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
       if not ok then error "Failed to commit closing connection transaction";
       (*
       PEffects.destroy peffects >>= fun e3 ->
-      Quota.remove dom >>= fun e4 ->
       let origin =
         Printf.sprintf "Closing connection %d domain %d\n\nException was: %s"
           (Connection.index c) dom (Printexc.to_string e) in
