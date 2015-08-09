@@ -69,6 +69,8 @@ module Make(V: PERSISTENCE) = struct
       f v
     end
 
+  let watches = Hashtbl.create 7
+
   (* The 'path operations' are the ones which can be done in transactions.
      The other operations are always done outside any current transaction. *)
   let pathop domid perms path op v = match op with
@@ -98,7 +100,7 @@ module Make(V: PERSISTENCE) = struct
     rm v path >>|= fun () ->
     return (`Ok (Response.Rm, nothing))
 
-  let reply_or_fail domid perms hdr req = match req with
+  let reply_or_fail domid perms hdr send_watch_event req = match req with
   | Request.PathOp (path, op) ->
     let path = Path.of_string path in
     with_transaction domid hdr req (pathop domid perms path op)
@@ -122,10 +124,32 @@ module Make(V: PERSISTENCE) = struct
     end else begin
       return (`Ok (Response.Transaction_end, nothing))
     end
+  | Request.Watch (path, token) ->
+    let open Protocol.Name in
+    let name = of_string path in
+    begin match name with
+    | Absolute path ->
+      V.watch path (fun () -> send_watch_event path token)
+      >>= fun w ->
+      Hashtbl.replace watches (name, token) w;
+      return (`Ok (Response.Watch, nothing))
+    | Relative path ->
+      return (`Not_implemented "relative watch")
+    | Predefined IntroduceDomain ->
+      return (`Not_implemented "introduce domain")
+    | Predefined ReleaseDomain ->
+      return (`Not_implemented "release domain")
+    end
+  | Request.Unwatch (path, token) ->
+    let open Protocol.Name in
+    let name = of_string path in
+    if Hashtbl.mem watches (name, token)
+    then Hashtbl.remove watches (name, token);
+    return (`Ok (Response.Unwatch, nothing))
   | _ ->
     return (`Not_implemented (Op.to_string hdr.Header.ty))
 
-  let reply domid perms hdr req =
+  let reply domid perms hdr send_watch_event req =
     debug "<-  rid %ld tid %ld %s"
       hdr.Header.rid hdr.Header.tid
       (Sexp.to_string (Request.sexp_of_t req));
@@ -135,7 +159,7 @@ module Make(V: PERSISTENCE) = struct
 
     Lwt.catch
       (fun () ->
-        reply_or_fail domid perms hdr req >>= function
+        reply_or_fail domid perms hdr send_watch_event req >>= function
         | `Ok x -> return (x, None)
         | `Enoent path -> errorwith ~error_info:(Some (Path.to_string path)) "ENOENT"
         | `Not_implemented fn -> errorwith ~error_info:(Some fn) "EINVAL"

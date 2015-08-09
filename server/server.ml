@@ -80,6 +80,13 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
         return ()
 			done in
 *)
+    let send_watch_event path token =
+      let response = Protocol.Response.Watchevent(Protocol.Name.Absolute path, token) in
+      let hdr = Header.({ tid = -1l; rid = -1l; ty = Op.Watchevent; len = 0 }) in
+      T.enqueue t hdr response >>= fun next_write_ofs ->
+      (* XXX: what do I do with next_write_ofs? *)
+      return () in
+
     try_lwt
       let rec loop () =
         (* (Re-)complete any outstanding request. In the event of a crash
@@ -133,7 +140,7 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
 (*
             E.reply v (Some limits) perm c hdr request >>= fun (response, side_effects) ->
 *)
-            E.reply domid perms hdr request >>= fun (response, side_effects) ->
+            E.reply domid perms hdr send_watch_event request >>= fun (response, side_effects) ->
             let hdr = Protocol.({ hdr with Header.ty = Response.get_ty response}) in
             return (hdr, response, side_effects, read_ofs)
           | read_ofs, `Error msg ->

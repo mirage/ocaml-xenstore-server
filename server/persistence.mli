@@ -30,4 +30,10 @@ module type PERSISTENCE = sig
   val rm: t -> Protocol.Path.t -> [ `Ok of unit ] Lwt.t
 
   val merge: t -> string -> bool Lwt.t
+
+  type watch
+
+  val watch: Protocol.Path.t -> (unit -> unit Lwt.t) -> watch Lwt.t
+
+  val unwatch: watch -> unit Lwt.t
 end

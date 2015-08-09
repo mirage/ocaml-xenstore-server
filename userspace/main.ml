@@ -196,6 +196,33 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
         | `Conflict msg ->
           info "Conflict while rebasing database view: %s. Asking client to retry" msg;
           return false
+
+    type watch = unit -> unit Lwt.t
+
+    let watch path callback_fn =
+      let wrapper x =
+        info "Got a diff";
+        match x with
+        | `Updated ((_, a), (_, b)) ->
+          info "Updated %s -> %s" a b;
+          callback_fn ()
+        | `Removed (_, a) ->
+          info "Removed %s" a;
+          let _ = Node.contents_of_sexp (Sexp.of_string a) in
+          (* TODO: remove watches for children *)
+          callback_fn ()
+        | `Added (_, a) ->
+          info "Added %s" a;
+          let _ = Node.contents_of_sexp (Sexp.of_string a) in
+          (* TODO: add watches for children *)
+          callback_fn () in
+      DB.watch_key (db "") (value_of_filename path) wrapper
+      >>= fun unwatch_value ->
+      DB.watch_key (db "") (dir_of_filename path) wrapper
+      >>= fun unwatch_dir ->
+      return (fun () -> unwatch_value () >>= fun () -> unwatch_dir ())
+    
+    let unwatch watch = watch ()
   end in
 
   (* Create the root node *)
