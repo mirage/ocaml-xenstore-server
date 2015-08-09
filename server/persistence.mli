@@ -33,7 +33,7 @@ module type PERSISTENCE = sig
 
   type watch
 
-  val watch: Protocol.Path.t -> (unit -> unit Lwt.t) -> watch Lwt.t
+  val watch: Protocol.Path.t -> (Protocol.Path.t -> unit Lwt.t) -> watch Lwt.t
 
   val unwatch: watch -> unit Lwt.t
 end

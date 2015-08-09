@@ -80,8 +80,8 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
         return ()
 			done in
 *)
-    let send_watch_event path token =
-      let response = Protocol.Response.Watchevent(Protocol.Name.Absolute path, token) in
+    let send_watch_event token path =
+      let response = Protocol.Response.Watchevent(path, token) in
       let hdr = Header.({ tid = -1l; rid = -1l; ty = Op.Watchevent; len = 0 }) in
       T.enqueue t hdr response >>= fun next_write_ofs ->
       (* XXX: what do I do with next_write_ofs? *)

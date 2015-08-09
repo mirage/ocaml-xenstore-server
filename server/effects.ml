@@ -129,12 +129,17 @@ module Make(V: PERSISTENCE) = struct
     let name = of_string path in
     begin match name with
     | Absolute path ->
-      V.watch path (fun () -> send_watch_event path token)
+      V.watch path (fun path -> send_watch_event token (Protocol.Name.Absolute path))
       >>= fun w ->
       Hashtbl.replace watches (name, token) w;
       return (`Ok (Response.Watch, nothing))
     | Relative path ->
-      return (`Not_implemented "relative watch")
+      let domainpath = Protocol.Path.of_string_list [ "local"; "domain"; string_of_int domid ] in
+      let absolute = Protocol.Name.(to_path (resolve name (Absolute domainpath))) in
+      V.watch absolute (fun path -> send_watch_event token (Protocol.Name.(relative (Absolute path) (Absolute domainpath))))
+      >>= fun w ->
+      Hashtbl.replace watches (name, token) w;
+      return (`Ok (Response.Watch, nothing))
     | Predefined IntroduceDomain ->
       return (`Not_implemented "introduce domain")
     | Predefined ReleaseDomain ->

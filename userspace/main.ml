@@ -116,6 +116,13 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
       v: DB_View.t;
     }
 
+    let remove_suffix suffix x =
+      let suffix' = String.length suffix and x' = String.length x in
+      String.sub x 0 (x' - suffix')
+    let endswith suffix x =
+      let suffix' = String.length suffix and x' = String.length x in
+      suffix' <= x' && (String.sub x (x' - suffix') suffix' = suffix)
+
     let dir_suffix = ".dir"
     let value_suffix = ".value"
 
@@ -128,12 +135,13 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
     let dir_of_filename path =
       root :: (List.rev (List.map (fun x -> x ^ dir_suffix) (List.rev (Protocol.Path.to_string_list path))))
 
-    let remove_suffix suffix x =
-      let suffix' = String.length suffix and x' = String.length x in
-      String.sub x 0 (x' - suffix')
-    let endswith suffix x =
-      let suffix' = String.length suffix and x' = String.length x in
-      suffix' <= x' && (String.sub x (x' - suffix') suffix' = suffix)
+    let to_filename = List.map (fun x ->
+      if endswith dir_suffix x
+      then remove_suffix dir_suffix x
+      else if endswith value_suffix x
+           then remove_suffix value_suffix x
+           else x
+    )
 
     let create () =
       DB_View.of_path (db "") [] >>= fun v ->
@@ -199,27 +207,53 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
 
     type watch = unit -> unit Lwt.t
 
+    let rec ls_lR view key =
+      DB_View.list view key >>= fun keys' ->
+      Lwt_list.map_s (ls_lR view) keys' >>= fun path_list_list ->
+      return (key :: (List.concat path_list_list))
+
+    module KeySet = Set.Make(struct
+      type t = string list
+      let compare = Pervasives.compare
+    end)
+
+    let ls_lR view key =
+      ls_lR view key
+      >>= fun all ->
+      let keys = List.map to_filename all in
+      return (List.fold_left (fun set x -> KeySet.add x set) KeySet.empty keys)
+
     let watch path callback_fn =
-      let wrapper x =
-        info "Got a diff";
-        match x with
+      DB_View.watch_path (db "") (dir_of_filename path) (function
         | `Updated ((_, a), (_, b)) ->
-          info "Updated %s -> %s" a b;
-          callback_fn ()
-        | `Removed (_, a) ->
-          info "Removed %s" a;
-          let _ = Node.contents_of_sexp (Sexp.of_string a) in
-          (* TODO: remove watches for children *)
-          callback_fn ()
-        | `Added (_, a) ->
-          info "Added %s" a;
-          let _ = Node.contents_of_sexp (Sexp.of_string a) in
-          (* TODO: add watches for children *)
-          callback_fn () in
-      DB.watch_key (db "") (value_of_filename path) wrapper
-      >>= fun unwatch_value ->
-      DB.watch_key (db "") (dir_of_filename path) wrapper
-      >>= fun unwatch_dir ->
+          ls_lR b []
+          >>= fun all ->
+          Lwt_list.iter_s
+            (fun key ->
+              info "Watchevent (updated): %s/%s" (Protocol.Path.to_string path) (String.concat "/" key);
+              callback_fn (Protocol.Path.of_string_list key)
+            ) (KeySet.fold (fun elt acc -> elt :: acc) all [])
+        | `Removed ((_, a)) ->
+          ls_lR a []
+          >>= fun all ->
+          Lwt_list.iter_s
+            (fun key ->
+              info "Watchevent (removed): %s/%s" (Protocol.Path.to_string path) (String.concat "/" key);
+              callback_fn (Protocol.Path.of_string_list key);
+            ) (KeySet.fold (fun elt acc -> elt :: acc) all [])
+        | `Added ((_, a)) ->
+          ls_lR a []
+          >>= fun all ->
+          Lwt_list.iter_s
+            (fun key ->
+              info "Watchevent (added): %s/%s" (Protocol.Path.to_string path) (String.concat "/" key);
+              callback_fn (Protocol.Path.of_string_list key); 
+            ) (KeySet.fold (fun elt acc -> elt :: acc) all [])
+      ) >>= fun unwatch_dir ->
+      DB.watch_key (db "") (value_of_filename path) (fun _ ->
+        info "Watchevent (changed): %s" (Protocol.Path.to_string path);
+        callback_fn path
+      ) >>= fun unwatch_value ->
       return (fun () -> unwatch_value () >>= fun () -> unwatch_dir ())
     
     let unwatch watch = watch ()
