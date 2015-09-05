@@ -29,7 +29,7 @@ module Make(V: PERSISTENCE) = struct
       let dirname = Path.dirname path in
       mkdir v perms dirname creator >>|= fun () ->
       V.read v perms dirname >>|= fun node ->
-      V.write v path Node.({ node with creator; value = "" }) >>|= fun () ->
+      V.write v perms path Node.({ node with creator; value = "" }) >>|= fun () ->
       return (`Ok ())
 
   (* Rm is recursive *)
@@ -82,7 +82,7 @@ module Make(V: PERSISTENCE) = struct
     return (`Ok (Response.Getperms node.Node.perms, nothing))
   | Request.Setperms acl ->
     V.read v perms path >>|= fun node ->
-    V.write v path { node with Node.perms = acl} >>|= fun () ->
+    V.write v perms path { node with Node.perms = acl} >>|= fun () ->
     return (`Ok (Response.Setperms, nothing))
   | Request.Directory ->
     V.list v path >>|= fun names ->
@@ -91,7 +91,7 @@ module Make(V: PERSISTENCE) = struct
     let dirname = Path.dirname path in
     mkdir v perms dirname domid >>|= fun () ->
     V.read v perms dirname >>|= fun node ->
-    V.write v path Node.({ node with creator = domid; value }) >>|= fun () ->
+    V.write v perms path Node.({ node with creator = domid; value }) >>|= fun () ->
     return (`Ok (Response.Write, nothing))
   | Request.Mkdir ->
     mkdir v perms path domid >>|= fun () ->

@@ -69,7 +69,7 @@ let make ?(prefer_merge=true) config db_m =
       (try_lwt
         DB_View.mem t.v (value_of_filename path)
        with e -> (error "%s" (Printexc.to_string e); return false))
-    let write t path contents =
+    let write t perms path contents =
       (try_lwt
         DB_View.update t.v (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents)) >>= fun () ->
         return (`Ok ())
@@ -185,9 +185,9 @@ let make ?(prefer_merge=true) config db_m =
   (* Create the root node *)
   V.create () >>= fun v ->
 
-  fail_on_error (V.write v Protocol.Path.empty Node.({ creator = 0;
-                                                       perms = Protocol.ACL.({ owner = 0; other = NONE; acl = []});
-                                                       value = "" })) >>= fun () ->
+  let perms = Protocol.ACL.( { owner = 0; other = NONE; acl = [] }) in
+  fail_on_error (V.write v perms Protocol.Path.empty Node.({ creator = 0; perms; value = "" }))
+  >>= fun () ->
   V.merge v "Adding root node\n\nA xenstore tree always has a root node, owned
   by domain 0." >>= fun ok ->
   ( if not ok then fail (Failure "Failed to merge transaction writing the root node") else return () ) >>= fun () ->

@@ -23,7 +23,7 @@ module type PERSISTENCE = sig
 
   val list: t -> Protocol.Path.t -> [ `Ok of string list | `Enoent of Protocol.Path.t ] Lwt.t
 
-  val write: t -> Protocol.Path.t -> Node.contents -> [ `Ok of unit ] Lwt.t
+  val write: t -> Perms.t ->  Protocol.Path.t -> Node.contents -> [ `Ok of unit | `Eacces of Protocol.Path.t ] Lwt.t
 
   val mem: t -> Protocol.Path.t -> bool Lwt.t
 
