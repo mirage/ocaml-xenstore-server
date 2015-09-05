@@ -19,6 +19,9 @@ let ( |> ) a b = b a
 let ( ++ ) a b x = a (b x)
 let id x = x
 
+let enable_debug = ref false
+
+(*
 module Q = Quota_interface (* make sure the filesystem is mounted *)
 
 let empty_store () =
@@ -36,8 +39,6 @@ let empty_store () =
 let none = Transaction.none
 
 let _ = Database.initialise S.NoPersistence
-
-let enable_debug = ref false
 
 let debug fmt =
         Printf.kprintf (fun s -> if !enable_debug then (print_string s; print_string "\n")) fmt
@@ -692,6 +693,7 @@ let test_control_perms () =
 		dom1, none, PathOp("/tool/xenstored/quota/default/number-of-entries", Write "1"), Response.Error "EACCES";
 		dom1, none, PathOp("/tool/xenstored/log/reply-err/ENOENT", Write "1"), Response.Error "EACCES";
 	]
+*)
 
 let _ =
   let verbose = ref false in
@@ -702,6 +704,7 @@ let _ =
 
   let suite = "xenstore" >:::
     [
+(*
 		"test_implicit_create" >:: test_implicit_create;
 		"test_directory_order" >:: test_directory_order;
 		"getperms(setperms)" >:: test_setperms_getperms;
@@ -729,5 +732,6 @@ let _ =
 		"test_quota_maxent" >:: test_quota_maxent;
 		"test_watch_event_quota" >:: test_watch_event_quota;
 		"test_control_perms" >:: test_control_perms;
+*)
 	] in
   run_test_tt ~verbose:!verbose suite

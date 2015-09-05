@@ -55,23 +55,23 @@ Executable core_test
   Install:            false
   BuildDepends:       lwt, lwt.unix, xenstore, oUnit
 
-#Executable server_test
-#  CompiledObject:     best
-#  Path:               server_test
-#  MainIs:             server_test.ml
-#  Build$:             flag(tests)
-#  Custom:             true
-#  Install:            false
-#  BuildDepends:       lwt, xenstore, xenstored, oUnit
+Executable server_test
+  CompiledObject:     best
+  Path:               server_test
+  MainIs:             server_test.ml
+  Build$:             flag(tests)
+  Custom:             true
+  Install:            false
+  BuildDepends:       lwt, xenstore, xenstored, oUnit
 
-#Executable server_binary_test
-#  CompiledObject:     best
-#  Path:               server_test
-#  MainIs:             binary.ml
-#  Build$:             flag(tests)
-#  Custom:             true
-#  Install:            false
-#  BuildDepends:       lwt, xenstore, xenstore.unix, xenstored, oUnit
+Executable server_binary_test
+  CompiledObject:     best
+  Path:               server_test
+  MainIs:             binary.ml
+  Build$:             flag(tests)
+  Custom:             true
+  Install:            false
+  BuildDepends:       lwt, xenstore, xenstore.unix, xenstored, oUnit
 
 Test core_test
   Run$:               flag(tests)
