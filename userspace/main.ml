@@ -22,92 +22,12 @@ let debug fmt = Logging.debug "xenstored" fmt
 let info  fmt = Logging.info  "xenstored" fmt
 let error fmt = Logging.error "xenstored" fmt
 
-let syslog = Lwt_log.syslog ~facility:`Daemon ()
-
-let shutting_down_logger = ref false
-let shutdown_logger () =
-  shutting_down_logger := true;
-  info "Shutting down the logger"
-
-let rec logging_thread daemon logger =
-  let log_batch () =
-    lwt lines = Logging.get logger in
-    Lwt_list.iter_s
-      (fun x ->
-        lwt () =
-          if daemon
-          then Lwt_log.log ~logger:syslog ~level:Lwt_log.Notice x
-          else Lwt_io.write_line Lwt_io.stdout x in
-          return ()
-      ) lines in
-  log_batch () >>= fun () ->
-  if not(!shutting_down_logger)
-  then logging_thread daemon logger
-  else begin
-    (* Grab the last few lines after the shutdown was triggered *)
-    log_batch () >>= fun () ->
-    Lwt_io.flush_all ()
-  end
-
-let default_pidfile = "/var/run/xenstored.pid"
-
-open Cmdliner
-
-let pidfile =
-  let doc = "The path to the pidfile, if running as a daemon" in
-  Arg.(value & opt string default_pidfile & info [ "pidfile" ] ~docv:"PIDFILE" ~doc)
-
-let daemon =
-  let doc = "Run as a daemon" in
-  Arg.(value & flag & info [ "daemon" ] ~docv:"DAEMON" ~doc)
-
-let path =
-  let doc = "The path to the Unix domain socket" in
-  Arg.(value & opt string !Sockets.xenstored_socket & info [ "path" ] ~docv:"PATH" ~doc)
-
-let enable_xen =
-  let doc = "Provide service to VMs over shared memory" in
-  Arg.(value & flag & info [ "enable-xen" ] ~docv:"XEN" ~doc)
-
-let enable_unix =
-  let doc = "Provide service locally over a Unix domain socket" in
-  Arg.(value & flag & info [ "enable-unix" ] ~docv:"UNIX" ~doc)
-
-let irmin_path =
-  let doc = "Persist xenstore database writes to the specified Irminsule database path" in
-  Arg.(value & opt (some string) None & info [ "database" ] ~docv:"DATABASE" ~doc)
-
-let prefer_merge =
-  let doc = "Prefer to generate merge commits (default is to always rebase transactions)" in
-  Arg.(value & flag & info [ "prefer-merge"] ~docv:"PREFER-MERGE" ~doc)
-
-let ensure_directory_exists dir_needed =
-    if not(Sys.file_exists dir_needed && (Sys.is_directory dir_needed)) then begin
-      error "The directory (%s) doesn't exist.\n" dir_needed;
-      fail (Failure "directory does not exist")
-    end else return ()
-
 module type DB_S = Irmin.S
   with type key = Irmin.Contents.String.Path.t
    and type value = string
 
-let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_merge () =
-  let open Irmin_unix in
-  ( match irmin_path with
-  | None ->
-    info "No database provided: will use an in-memory database";
-    let module DB =
-      Irmin_mem.Make(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
-    let config = Irmin_mem.config () in
-    return (config, (module DB: DB_S))
-  | Some x ->
-    let module DB =
-      Irmin_git.FS(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
-    let config = Irmin_git.config ~root:x ~bare:true () in
-    return (config, (module DB: DB_S))
-  ) >>= fun (config, db_m) ->
+let make_store ?(prefer_merge=true) config db_m =
   let module DB = (val db_m: DB_S) in
-
   DB.create config Irmin_unix.task >>= fun db ->
   (* view is no longer embedded in S_MAKER *)
   let module DB_View = Irmin.View(DB) in
@@ -268,6 +188,96 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
   V.merge v "Adding root node\n\nA xenstore tree always has a root node, owned
   by domain 0." >>= fun ok ->
   ( if not ok then fail (Failure "Failed to merge transaction writing the root node") else return () ) >>= fun () ->
+  return (module V: Persistence.PERSISTENCE)
+
+
+
+
+let syslog = Lwt_log.syslog ~facility:`Daemon ()
+
+let shutting_down_logger = ref false
+let shutdown_logger () =
+  shutting_down_logger := true;
+  info "Shutting down the logger"
+
+let rec logging_thread daemon logger =
+  let log_batch () =
+    lwt lines = Logging.get logger in
+    Lwt_list.iter_s
+      (fun x ->
+        lwt () =
+          if daemon
+          then Lwt_log.log ~logger:syslog ~level:Lwt_log.Notice x
+          else Lwt_io.write_line Lwt_io.stdout x in
+          return ()
+      ) lines in
+  log_batch () >>= fun () ->
+  if not(!shutting_down_logger)
+  then logging_thread daemon logger
+  else begin
+    (* Grab the last few lines after the shutdown was triggered *)
+    log_batch () >>= fun () ->
+    Lwt_io.flush_all ()
+  end
+
+let default_pidfile = "/var/run/xenstored.pid"
+
+open Cmdliner
+
+let pidfile =
+  let doc = "The path to the pidfile, if running as a daemon" in
+  Arg.(value & opt string default_pidfile & info [ "pidfile" ] ~docv:"PIDFILE" ~doc)
+
+let daemon =
+  let doc = "Run as a daemon" in
+  Arg.(value & flag & info [ "daemon" ] ~docv:"DAEMON" ~doc)
+
+let path =
+  let doc = "The path to the Unix domain socket" in
+  Arg.(value & opt string !Sockets.xenstored_socket & info [ "path" ] ~docv:"PATH" ~doc)
+
+let enable_xen =
+  let doc = "Provide service to VMs over shared memory" in
+  Arg.(value & flag & info [ "enable-xen" ] ~docv:"XEN" ~doc)
+
+let enable_unix =
+  let doc = "Provide service locally over a Unix domain socket" in
+  Arg.(value & flag & info [ "enable-unix" ] ~docv:"UNIX" ~doc)
+
+let irmin_path =
+  let doc = "Persist xenstore database writes to the specified Irminsule database path" in
+  Arg.(value & opt (some string) None & info [ "database" ] ~docv:"DATABASE" ~doc)
+
+let prefer_merge =
+  let doc = "Prefer to generate merge commits (default is to always rebase transactions)" in
+  Arg.(value & flag & info [ "prefer-merge"] ~docv:"PREFER-MERGE" ~doc)
+
+let ensure_directory_exists dir_needed =
+    if not(Sys.file_exists dir_needed && (Sys.is_directory dir_needed)) then begin
+      error "The directory (%s) doesn't exist.\n" dir_needed;
+      fail (Failure "directory does not exist")
+    end else return ()
+
+let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_merge () =
+  let open Irmin_unix in
+  ( match irmin_path with
+  | None ->
+    info "No database provided: will use an in-memory database";
+    let module DB =
+      Irmin_mem.Make(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
+    let config = Irmin_mem.config () in
+    return (config, (module DB: DB_S))
+  | Some x ->
+    let module DB =
+      Irmin_git.FS(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
+    let config = Irmin_git.config ~root:x ~bare:true () in
+    return (config, (module DB: DB_S))
+  ) >>= fun (config, db_m) ->
+
+  make_store ~prefer_merge config db_m
+  >>= fun v_m ->
+  let module V = (val v_m : Persistence.PERSISTENCE) in
+
   let module UnixServer = Server.Make(Sockets)(V) in
   let module DomainServer = Server.Make(Interdomain)(V) in
   lwt () = if not enable_xen && (not enable_unix) then begin
