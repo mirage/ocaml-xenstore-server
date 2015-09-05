@@ -18,22 +18,18 @@ module Watch : sig
   type t = Protocol.Name.t * string with sexp
 end
 
-module Make(V: PERSISTENCE): sig
+type t
 
-  type t
+val create: (Uri.t * int) -> t Lwt.t
 
-  val create: V.t -> (Uri.t * int) -> t Lwt.t
+val index: t -> int
+(** a unique id associated with a connection *)
 
-  val index: t -> int
-  (** a unique id associated with a connection *)
+val perms: t -> Perms.t
+(** The premissions associated with a connection *)
 
-  val perms: t -> Perms.t
-  (** The premissions associated with a connection *)
-
-  val destroy: V.t -> t -> unit Lwt.t
-  (** [destroy v t] destroys any connection associated with [t] *)
-
-end
+val destroy: t -> unit Lwt.t
+(** [destroy v t] destroys any connection associated with [t] *)
 
 (*
 module Watch_events: PQueue.S with type v := Watch.t

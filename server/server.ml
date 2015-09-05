@@ -31,7 +31,7 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
     next_write_ofs: T.offset;                 (* the next byte to write *)
   }
 
-  module C = Connection.Make(V)
+  module C = Connection
   module E = Effects.Make(V)
 
   let handle_connection t =
@@ -39,7 +39,7 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
     let domid = T.domain_of t in
 
     V.create () >>= fun v ->
-    C.create v (address, domid) >>= fun c ->
+    C.create (address, domid) >>= fun c ->
     let special_path name = [ "tool"; "xenstored"; name; (match Uri.scheme address with Some x -> x | None -> "unknown"); string_of_int (C.index c) ] in
 
     (* If this is a restart, there will be an existing side_effects entry.
@@ -176,7 +176,7 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
       Mount.unmount connection_path >>= fun e1 ->
       *)
       V.create () >>= fun v ->
-			C.destroy v c >>= fun () ->
+			C.destroy c >>= fun () ->
       V.merge v (Printf.sprintf "Closing connection %d to domain %d\n\nException was: %s"
         (C.index c) domid (Printexc.to_string e)) >>= fun ok ->
       if not ok then error "Failed to commit closing connection transaction";

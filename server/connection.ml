@@ -24,23 +24,21 @@ module Watch = struct
   type t = Protocol.Name.t * string with sexp
 end
 
-module Make(V: PERSISTENCE) = struct
-  type t = {
-    domid: int;
-    perms: Perms.t;
-  }
+type t = {
+  domid: int;
+  perms: Perms.t;
+}
 
-  let create v (uri, domid) =
-    let perms = Perms.of_domain domid in
-    return { domid; perms }
+let create (uri, domid) =
+  let perms = Perms.of_domain domid in
+  return { domid; perms }
 
-  let index _ = -1
+let index _ = -1
 
-  let perms t = t.perms
+let perms t = t.perms
 
-  let destroy v t =
-    return ()
-end
+let destroy t =
+  return ()
 (*
 module Watch_events = PQueue.Make(Watch)
 module Watch_registrations = PSet.Make(Watch)

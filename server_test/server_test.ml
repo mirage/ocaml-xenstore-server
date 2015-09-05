@@ -12,7 +12,9 @@
  * GNU Lesser General Public License for more details.
  *)
 open Xenstore
+open Xenstored
 open OUnit
+open Lwt
 open Sexplib
 
 let ( |> ) a b = b a
@@ -21,94 +23,59 @@ let id x = x
 
 let enable_debug = ref false
 
-(*
-module Q = Quota_interface (* make sure the filesystem is mounted *)
-
 let empty_store () =
-        let open Lwt in
-        let t =
-                Database.store >>= fun db ->
-                let tr = Transaction.make Transaction.none db in
-                List.iter (fun x ->
-                        Transaction.rm tr (Perms.of_domain 0) (Protocol.Path.of_string_list [ x ])
-                ) [ "a"; "b"; "foo"; "1"; "local" ];
-                Database.persist (Transaction.get_side_effects tr) >>= fun () ->
-                return db in
-        Lwt_main.run t
-
-let none = Transaction.none
-
-let _ = Database.initialise S.NoPersistence
-
-let debug fmt =
-        Printf.kprintf (fun s -> if !enable_debug then (print_string s; print_string "\n")) fmt
+  let open Irmin_unix in
+  let module DB =
+    Irmin_mem.Make(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
+  let config = Irmin_mem.config () in
+  Lwt_main.run (Xirmin.make config (module DB))
 
 let rpc store c tid request =
-        let open Lwt in
-        let hdr = { Protocol.Header.tid; rid = 0l; ty = Protocol.Request.get_ty request; len = 0 } in
-        debug "store = %s" (Sexp.to_string (Store.sexp_of_t store));
-        try
-                Quota.limits_of_domain (Connection.domid c) >>= fun (limits, e1) ->
-                Connection.PPerms.get (Connection.perm c) >>= fun (perm, e2) ->
-                Database.persist Transaction.(e1 ++ e2) >>= fun () ->
-                Call.reply store (Some limits) perm c hdr request >>= fun (response, side_effects) ->
-                debug "request = %s response = %s side_effects = %s" (Sexp.to_string (Protocol.Request.sexp_of_t request)) (Sexp.to_string (Protocol.Response.sexp_of_t response)) (Sexp.to_string (Transaction.sexp_of_side_effects side_effects));
-                let iter_persist f xs =
-                  Lwt_list.fold_left_s (fun side_effects x ->
-                    f x >>= fun effects ->
-                    return Transaction.(side_effects ++ effects)
-                  ) Transaction.(no_side_effects ()) xs >>= fun side_effects ->
-                  Database.persist side_effects in
-                Transaction.get_watch side_effects |> List.rev |> iter_persist (Connection.watch c (Some limits)) >>= fun () ->
-                Transaction.get_unwatch side_effects |> List.rev |> iter_persist (Connection.unwatch c) >>= fun () ->
-                Transaction.get_watches side_effects |> List.rev |> iter_persist (Connection.fire (Some limits)) >>= fun () ->
-                return response
-        with
-        | Node.Doesnt_exist x ->
-                debug "request = %s response = Doesnt_exist %s" (Sexp.to_string (Protocol.Request.sexp_of_t request)) (Protocol.Path.to_string x);
-                fail (Node.Doesnt_exist x)
+  let module V = (val store: Persistence.PERSISTENCE) in
+  let hdr = { Protocol.Header.tid; rid = 0l; ty = Protocol.Request.get_ty request; len = 0 } in
+  let module E = Effects.Make(V) in
+  let domid = 0 in
+  let perms = () in
+  let send_watch_event _ _ = return () in
+  E.reply domid perms hdr send_watch_event request
 
 let run store (sequence: (Connection.t * int32 * Protocol.Request.t * Protocol.Response.t) list) =
-        let open Lwt in
-	Lwt_main.run (Lwt_list.iter_s
-		(fun (c, tid, request, expected_result) ->
-                        rpc store c tid request >>= fun actual ->
-                        (* Store.dump_stdout store; *)
-                        assert_equal ~printer:(fun x -> Sexp.to_string (Protocol.Response.sexp_of_t x)) expected_result actual;
-                        return ()
-		) sequence)
+  let open Lwt in
+  Lwt_main.run (Lwt_list.iter_s
+    (fun (c, tid, request, expected_result) ->
+      rpc store c tid request >>= fun actual ->
+      (* Store.dump_stdout store; *)
+      assert_equal ~printer:(fun x -> Sexp.to_string (Protocol.Response.sexp_of_t x)) expected_result (fst actual);
+      return ()
+    ) sequence)
 
 let interdomain domid = Uri.make ~scheme:"domain" ~path:(string_of_int domid) ()
 
-let connect domid =
-        let t =
-                let open Lwt in
-                Connection.destroy (interdomain domid) >>= fun effects1 ->
-                Connection.create (interdomain domid, domid) >>= fun (conn, effects2) ->
-                Database.persist Transaction.(effects1 ++ effects2) >>= fun () ->
-                return conn in
-        Lwt_main.run t
+let connect domid = Lwt_main.run (Connection.create (interdomain domid, domid))
+
+let none = 0l
 
 let test_implicit_create () =
-	(* Write a path and check the parent nodes can be read *)
-	let dom0 = connect 0 in
-	let domU = connect 1 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	run store [
-		(* If a node doesn't exist, everyone gets ENOENT: *)
-		dom0, none, PathOp("/a", Read), Response.Error "ENOENT";
-		domU, none, PathOp("/a", Read), Response.Error "ENOENT";
-		(* If dom0 makes a node, suddenly domU gets EACCES: *)
-		dom0, none, PathOp("/a/b", Write "hello"), Response.Write;
-		domU, none, PathOp("/a/b", Read), Response.Error "EACCES";
-		(* dom0 can also see the implicit path created: *)
-		dom0, none, PathOp("/a", Read), Response.Read "";
-		(* domU gets EACCES: *)
-		domU, none, PathOp("/a", Read), Response.Error "EACCES";
-	]
+  (* Write a path and check the parent nodes can be read *)
+  let dom0 = connect 0 in
+  let domU = connect 1 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  run store [
+    (* If a node doesn't exist, everyone gets ENOENT: *)
+    dom0, none, PathOp("/a", Read), Response.Error "ENOENT";
+    domU, none, PathOp("/a", Read), Response.Error "ENOENT";
+    (* If dom0 makes a node, suddenly domU gets EACCES: *)
+    dom0, none, PathOp("/a/b", Write "hello"), Response.Write;
+    domU, none, PathOp("/a/b", Read), Response.Error "EACCES";
+    (* dom0 can also see the implicit path created: *)
+    dom0, none, PathOp("/a", Read), Response.Read "";
+    (* domU gets EACCES: *)
+    domU, none, PathOp("/a", Read), Response.Error "EACCES";
+  ]
 
+(*
 let test_directory_order () =
 	(* Create nodes in a particular order and check 'directory'
 	   preserves the ordering *)
@@ -704,8 +671,8 @@ let _ =
 
   let suite = "xenstore" >:::
     [
-(*
 		"test_implicit_create" >:: test_implicit_create;
+(*
 		"test_directory_order" >:: test_directory_order;
 		"getperms(setperms)" >:: test_setperms_getperms;
 		"test_setperms_owner" >:: test_setperms_owner;
