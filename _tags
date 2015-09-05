@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 6327933a663b0f4c13e6c90ba780cac8)
+# DO NOT EDIT (digest: 360ac8a87c637e4ddd68bcd03186a97a)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -36,6 +36,7 @@ true: annot, bin_annot
 "server/connection.cmx": for-pack(Xenstored)
 "server/server.cmx": for-pack(Xenstored)
 "server/effects.cmx": for-pack(Xenstored)
+"server/xirmin.cmx": for-pack(Xenstored)
 <server/*.ml{,i,y}>: pkg_cstruct
 <server/*.ml{,i,y}>: pkg_cstruct.syntax
 <server/*.ml{,i,y}>: pkg_git
@@ -76,6 +77,50 @@ true: annot, bin_annot
 <core_test/*.ml{,i,y}>: pkg_uri
 <core_test/*.ml{,i,y}>: use_xenstore
 <core_test/core_test.{native,byte}>: custom
+# Executable server_test
+<server_test/server_test.{native,byte}>: pkg_cstruct
+<server_test/server_test.{native,byte}>: pkg_cstruct.syntax
+<server_test/server_test.{native,byte}>: pkg_git
+<server_test/server_test.{native,byte}>: pkg_irmin
+<server_test/server_test.{native,byte}>: pkg_irmin.unix
+<server_test/server_test.{native,byte}>: pkg_lwt
+<server_test/server_test.{native,byte}>: pkg_lwt.syntax
+<server_test/server_test.{native,byte}>: pkg_oUnit
+<server_test/server_test.{native,byte}>: pkg_sexplib
+<server_test/server_test.{native,byte}>: pkg_uri
+<server_test/server_test.{native,byte}>: use_xenstore
+<server_test/server_test.{native,byte}>: use_xenstored
+<server_test/server_test.{native,byte}>: custom
+# Executable server_binary_test
+<server_test/binary.{native,byte}>: pkg_cstruct
+<server_test/binary.{native,byte}>: pkg_cstruct.syntax
+<server_test/binary.{native,byte}>: pkg_git
+<server_test/binary.{native,byte}>: pkg_irmin
+<server_test/binary.{native,byte}>: pkg_irmin.unix
+<server_test/binary.{native,byte}>: pkg_lwt
+<server_test/binary.{native,byte}>: pkg_lwt.syntax
+<server_test/binary.{native,byte}>: pkg_lwt.unix
+<server_test/binary.{native,byte}>: pkg_oUnit
+<server_test/binary.{native,byte}>: pkg_sexplib
+<server_test/binary.{native,byte}>: pkg_uri
+<server_test/binary.{native,byte}>: use_xenstore
+<server_test/binary.{native,byte}>: use_xenstore_unix
+<server_test/binary.{native,byte}>: use_xenstored
+<server_test/*.ml{,i,y}>: pkg_cstruct
+<server_test/*.ml{,i,y}>: pkg_cstruct.syntax
+<server_test/*.ml{,i,y}>: pkg_git
+<server_test/*.ml{,i,y}>: pkg_irmin
+<server_test/*.ml{,i,y}>: pkg_irmin.unix
+<server_test/*.ml{,i,y}>: pkg_lwt
+<server_test/*.ml{,i,y}>: pkg_lwt.syntax
+<server_test/*.ml{,i,y}>: pkg_lwt.unix
+<server_test/*.ml{,i,y}>: pkg_oUnit
+<server_test/*.ml{,i,y}>: pkg_sexplib
+<server_test/*.ml{,i,y}>: pkg_uri
+<server_test/*.ml{,i,y}>: use_xenstore
+<server_test/*.ml{,i,y}>: use_xenstore_unix
+<server_test/*.ml{,i,y}>: use_xenstored
+<server_test/binary.{native,byte}>: custom
 # Executable oxenstored
 <userspace/main.{native,byte}>: use_liboxenstored_stubs
 <userspace/main.{native,byte}>: pkg_cmdliner
