@@ -101,11 +101,15 @@ let make ?(prefer_merge=true) config db_m =
         DB_View.remove t.v (value_of_filename path) >>= fun () ->
         return (`Ok ())
       with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
-    let read t path =
+    let read t perms path =
       (try_lwt
         DB_View.read t.v (value_of_filename path) >>= function
         | None -> return (`Enoent path)
-        | Some x -> return (`Ok (Node.contents_of_sexp (Sexp.of_string x)))
+        | Some x ->
+          let contents = Node.contents_of_sexp (Sexp.of_string x) in
+          if Perms.check perms Perms.READ contents.Node.perms
+          then return (`Ok contents)
+          else return (`Eacces path)
        with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
     let merge t msg =
       ( if prefer_merge then begin

@@ -104,10 +104,7 @@ let check (connection:t) request (node:Protocol.ACL.t) =
 			info "Permission denied: Domain %d has write only access" domainid;
 			false
 	in
-	if true
+	true
 	&& not (is_dom0 connection)
 	&& not (check_owner connection node)
 	&& not (List.exists check_acl (get_owners connection))
-	then raise Permission_denied
-
-

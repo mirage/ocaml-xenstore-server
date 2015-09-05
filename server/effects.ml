@@ -19,7 +19,7 @@ module Make(V: PERSISTENCE) = struct
 
   (* Every write or mkdir will recursively create parent nodes if they
      don't already exist. *)
-  let rec mkdir v path creator =
+  let rec mkdir v perms path creator =
     V.mem v path >>= function
     | true ->
       return (`Ok ())
@@ -27,8 +27,8 @@ module Make(V: PERSISTENCE) = struct
       (* The root node has been created in Main, otherwise we'd blow the
          stack here. *)
       let dirname = Path.dirname path in
-      mkdir v dirname creator >>|= fun () ->
-      V.read v dirname >>|= fun node ->
+      mkdir v perms dirname creator >>|= fun () ->
+      V.read v perms dirname >>|= fun node ->
       V.write v path Node.({ node with creator; value = "" }) >>|= fun () ->
       return (`Ok ())
 
@@ -75,26 +75,26 @@ module Make(V: PERSISTENCE) = struct
      The other operations are always done outside any current transaction. *)
   let pathop domid perms path op v = match op with
   | Request.Read ->
-    V.read v path >>|= fun node ->
+    V.read v perms path >>|= fun node ->
     return (`Ok (Response.Read node.Node.value, nothing))
   | Request.Getperms ->
-    V.read v path >>|= fun node ->
+    V.read v perms path >>|= fun node ->
     return (`Ok (Response.Getperms node.Node.perms, nothing))
-  | Request.Setperms perms ->
-    V.read v path >>|= fun node ->
-    V.write v path { node with Node.perms } >>|= fun () ->
+  | Request.Setperms acl ->
+    V.read v perms path >>|= fun node ->
+    V.write v path { node with Node.perms = acl} >>|= fun () ->
     return (`Ok (Response.Setperms, nothing))
   | Request.Directory ->
     V.list v path >>|= fun names ->
     return (`Ok (Response.Directory names, nothing))
   | Request.Write value ->
     let dirname = Path.dirname path in
-    mkdir v dirname domid >>|= fun () ->
-    V.read v dirname >>|= fun node ->
+    mkdir v perms dirname domid >>|= fun () ->
+    V.read v perms dirname >>|= fun node ->
     V.write v path Node.({ node with creator = domid; value }) >>|= fun () ->
     return (`Ok (Response.Write, nothing))
   | Request.Mkdir ->
-    mkdir v path domid >>|= fun () ->
+    mkdir v perms path domid >>|= fun () ->
     return (`Ok (Response.Mkdir, nothing))
   | Request.Rm ->
     rm v path >>|= fun () ->
@@ -167,6 +167,7 @@ module Make(V: PERSISTENCE) = struct
         reply_or_fail domid perms hdr send_watch_event req >>= function
         | `Ok x -> return (x, None)
         | `Enoent path -> errorwith ~error_info:(Some (Path.to_string path)) "ENOENT"
+        | `Eacces path -> errorwith ~error_info:(Some (Path.to_string path)) "EACCES"
         | `Not_implemented fn -> errorwith ~error_info:(Some fn) "EINVAL"
         | `Conflict -> errorwith "EAGAIN"
       )

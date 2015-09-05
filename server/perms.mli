@@ -46,9 +46,9 @@ type permission =
 exception Permission_denied
 (** Thrown by the [check] function if role does not have a specific permission *)
 
-val check: t -> permission -> Protocol.ACL.t -> unit
-(** [check role permission acl] throws [Permission_denied] if [role] does not
-    have [permission] according to the access control list [acl] *)
+val check: t -> permission -> Protocol.ACL.t -> bool
+(** [check role permission acl] returns [true] if [role] has [permission]
+    according to the access control list [acl] *)
 
 val has: t -> permission -> unit
 (** [has role permission] throws [Permission_denied] if [role] does not

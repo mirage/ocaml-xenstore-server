@@ -35,7 +35,7 @@ let rpc store c tid request =
   let hdr = { Protocol.Header.tid; rid = 0l; ty = Protocol.Request.get_ty request; len = 0 } in
   let module E = Effects.Make(V) in
   let domid = 0 in
-  let perms = () in
+  let perms = Connection.perms c in
   let send_watch_event _ _ = return () in
   E.reply domid perms hdr send_watch_event request
 
