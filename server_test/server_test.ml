@@ -125,40 +125,39 @@ let test_setperms_owner () =
     dom2, none, PathOp("/foo", Setperms { example_acl with Protocol.ACL.owner = 5 }), Response.Setperms;
   ]
 
-(*
+
 let begin_transaction store c =
-        let open Lwt in
-        let t =
-                Lwt.catch (fun () ->
-                        rpc store c none Protocol.Request.Transaction_start >>= function
-                        | Protocol.Response.Transaction_start tid -> return tid
-                        | _ -> failwith "begin_transaction")
-                (function
-                | Node.Doesnt_exist x ->
-                        debug "store = %s" (Sexp.to_string (Store.sexp_of_t store));
-                        failwith (Printf.sprintf "begin_transaction node doesn't exist: %s" (Protocol.Path.to_string x))
-                | e -> raise e
-                ) in
-        Lwt_main.run t
+  let open Lwt in
+  let t =
+    Lwt.catch (fun () ->
+      rpc store c none Protocol.Request.Transaction_start >>= function
+      | Protocol.Response.Transaction_start tid, _ -> return tid
+      | _, _ -> failwith "begin_transaction")
+    (function
+      | Node.Doesnt_exist x ->
+        failwith (Printf.sprintf "begin_transaction node doesn't exist: %s" (Protocol.Path.to_string x))
+      | e -> raise e
+    ) in
+    Lwt_main.run t
 
 let test_mkdir () =
-	(* Check that mkdir creates usable nodes *)
-        let dom0 = connect 0 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	run store [
-		dom0, none, PathOp("/a/b", Read), Response.Error "ENOENT";
-		dom0, none, PathOp("/a", Read), Response.Error "ENOENT";
-	];
-        let tid = begin_transaction store dom0 in
-	run store [
-		dom0, tid, PathOp("/bench/local/domain/0", Mkdir), Response.Mkdir;
-		dom0, tid, PathOp("/bench/local/domain/0", Setperms example_acl), Response.Setperms;
-		dom0, tid, PathOp("/bench/local/domain/0", Read), Response.Read "";
-		dom0, tid, Transaction_end true, Response.Transaction_end;
-	]
-
+  (* Check that mkdir creates usable nodes *)
+  let dom0 = connect 0 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  run store [
+    dom0, none, PathOp("/a/b", Read), Response.Error "ENOENT";
+    dom0, none, PathOp("/a", Read), Response.Error "ENOENT";
+  ];
+  let tid = begin_transaction store dom0 in
+  run store [
+    dom0, tid, PathOp("/bench/local/domain/0", Mkdir), Response.Mkdir;
+    dom0, tid, PathOp("/bench/local/domain/0", Setperms example_acl), Response.Setperms;
+    dom0, tid, PathOp("/bench/local/domain/0", Read), Response.Read "";
+    dom0, tid, Transaction_end true, Response.Transaction_end;
+  ]
+(*
 let test_empty () =
 	(* Check that I can read an empty value *)
         let dom0 = connect 0 in
@@ -675,8 +674,8 @@ let _ =
 		"test_directory_order" >:: test_directory_order;
 		"getperms(setperms)" >:: test_setperms_getperms;
 		"test_setperms_owner" >:: test_setperms_owner;
-(*
 		"test_mkdir" >:: test_mkdir;
+(*
 		"test_empty" >:: test_empty;
 		"test_rm" >:: test_rm;
 		"test_restrict" >:: test_restrict;
