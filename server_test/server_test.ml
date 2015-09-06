@@ -89,23 +89,23 @@ let test_directory_order () =
     dom0, none, PathOp("/a", Directory), Response.Directory ["1"; "2"; "3"];
   ]
 
-(*
 let example_acl =
-	let open Protocol.ACL in
-    { owner = 5; other = READ; acl = [ 2, WRITE; 3, RDWR ] }
+  let open Protocol.ACL in
+  { owner = 5; other = READ; acl = [ 2, WRITE; 3, RDWR ] }
 
 let test_setperms_getperms () =
-	(* Check that getperms(setperms(x)) = x *)
-        let dom0 = connect 0 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	run store [
-		dom0, none, PathOp("/foo", Write ""), Response.Write;
-		dom0, none, PathOp("/foo", Setperms example_acl), Response.Setperms;
-                dom0, none, PathOp("/foo", Getperms), Response.Getperms example_acl;
-	]
+  (* Check that getperms(setperms(x)) = x *)
+  let dom0 = connect 0 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  run store [
+    dom0, none, PathOp("/foo", Write ""), Response.Write;
+    dom0, none, PathOp("/foo", Setperms example_acl), Response.Setperms;
+    dom0, none, PathOp("/foo", Getperms), Response.Getperms example_acl;
+  ]
 
+(*
 let test_setperms_owner () =
 	(* Check that only the owner of a node can setperms even
 	   if another domain has read/write access *)
@@ -673,8 +673,8 @@ let _ =
     [
 		"test_implicit_create" >:: test_implicit_create;
 		"test_directory_order" >:: test_directory_order;
-(*
 		"getperms(setperms)" >:: test_setperms_getperms;
+(*
 		"test_setperms_owner" >:: test_setperms_owner;
 		"test_mkdir" >:: test_mkdir;
 		"test_empty" >:: test_empty;
