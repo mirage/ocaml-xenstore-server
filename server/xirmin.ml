@@ -44,6 +44,9 @@ let make ?(prefer_merge=true) config db_m =
 
     let dir_suffix = ".dir"
     let value_suffix = ".value"
+    let order_suffix = ".order"
+
+    type order = string list with sexp
 
     let root = "/"
 
@@ -54,12 +57,20 @@ let make ?(prefer_merge=true) config db_m =
     let dir_of_filename path =
       root :: (List.rev (List.map (fun x -> x ^ dir_suffix) (List.rev (Protocol.Path.to_string_list path))))
 
+    let order_of_filename path =  match List.rev (Protocol.Path.to_string_list path) with
+    | [] -> [ root ^ ".tmp" ]
+    | _ :: [] -> [ root ^ order_suffix ]
+    | _ :: file :: dirs -> root :: (List.rev ((file ^ order_suffix) :: (List.map (fun x -> x ^ dir_suffix) dirs)))
+
+
     let to_filename = List.map (fun x ->
       if endswith dir_suffix x
       then remove_suffix dir_suffix x
       else if endswith value_suffix x
            then remove_suffix value_suffix x
-           else x
+           else if endswith order_suffix x
+                then remove_suffix order_suffix x
+                else x
     )
 
     let create () =
@@ -70,10 +81,21 @@ let make ?(prefer_merge=true) config db_m =
         DB_View.mem t.v (value_of_filename path)
        with e -> (error "%s" (Printexc.to_string e); return false))
     let write t perms path contents =
-      (try_lwt
+        let parent = Protocol.Path.dirname path in
+        let order_path = order_of_filename parent in
+        ( DB_View.read t.v order_path
+          >>= function
+          | None -> return []
+          | Some x ->
+            return (order_of_sexp (Sexp.of_string x))
+        ) >>= fun order ->
+        ( if path <> Protocol.Path.empty then begin
+            let order' = order @ [ Protocol.Path.Element.to_string (Protocol.Path.basename path) ] in
+            DB_View.update t.v order_path (Sexp.to_string (sexp_of_order order'))
+          end else return ()
+        ) >>= fun () ->
         DB_View.update t.v (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents)) >>= fun () ->
         return (`Ok ())
-      with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
     let list t path =
       (try_lwt
         (* TODO: differentiate a directory which doesn't exist from an empty directory
@@ -83,22 +105,46 @@ let make ?(prefer_merge=true) config db_m =
         *)
           DB_View.list t.v (dir_of_filename path) >>= fun keys ->
           let union x xs = if not(List.mem x xs) then x :: xs else xs in
-          return (`Ok (List.fold_left (fun acc x -> match (List.rev x) with
+          let set_difference xs ys = List.filter (fun x -> not(List.mem x ys)) xs in
+          let all = List.fold_left (fun acc x -> match (List.rev x) with
             | basename :: _ ->
               if endswith dir_suffix basename
               then union (remove_suffix dir_suffix basename) acc
               else
                 if endswith value_suffix basename
                 then union (remove_suffix value_suffix basename) acc
-                else acc
+                else if endswith order_suffix basename
+                     then union (remove_suffix order_suffix basename) acc
+                     else acc
             | [] -> acc
-          ) [] keys))
+          ) [] keys in
+          (* We store the order of creation of keys, except those implicitly
+             created as part of a write /a/b/c. Some kernel clients expect the
+             order of the keys to be preserved. *)
+          ( DB_View.read t.v (order_of_filename path)
+            >>= function
+            | None -> return []
+            | Some x -> return (order_of_sexp (Sexp.of_string x))
+          ) >>= fun ordered ->
+          return (`Ok (ordered @ (set_difference all ordered)))
       with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
 
     let rm t path =
       (try_lwt
         DB_View.remove t.v (dir_of_filename path) >>= fun () ->
         DB_View.remove t.v (value_of_filename path) >>= fun () ->
+        DB_View.remove t.v (order_of_filename path) >>= fun () ->
+        let parent = Protocol.Path.dirname path in
+        let order_path = order_of_filename parent in
+        ( DB_View.read t.v order_path
+          >>= function
+          | None -> return []
+          | Some x ->
+            return (order_of_sexp (Sexp.of_string x))
+        ) >>= fun order ->
+        let order' = order @ [ Protocol.Path.Element.to_string (Protocol.Path.basename path) ] in
+        DB_View.update t.v order_path (Sexp.to_string (sexp_of_order order'))
+        >>= fun () ->
         return (`Ok ())
       with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
     let read t perms path =
