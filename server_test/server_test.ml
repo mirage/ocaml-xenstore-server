@@ -75,21 +75,21 @@ let test_implicit_create () =
     domU, none, PathOp("/a", Read), Response.Error "EACCES";
   ]
 
-(*
 let test_directory_order () =
-	(* Create nodes in a particular order and check 'directory'
-	   preserves the ordering *)
-        let dom0 = connect 0 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	run store [
-		dom0, none, PathOp("/a/1", Write ""), Response.Write;
-		dom0, none, PathOp("/a/2/foo", Write ""), Response.Write;
-		dom0, none, PathOp("/a/3", Write ""), Response.Write;
-		dom0, none, PathOp("/a", Directory), Response.Directory ["1"; "2"; "3"];
-	]
+  (* Create nodes in a particular order and check 'directory'
+     preserves the ordering *)
+  let dom0 = connect 0 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  run store [
+    dom0, none, PathOp("/a/1", Write ""), Response.Write;
+    dom0, none, PathOp("/a/2/foo", Write ""), Response.Write;
+    dom0, none, PathOp("/a/3", Write ""), Response.Write;
+    dom0, none, PathOp("/a", Directory), Response.Directory ["1"; "2"; "3"];
+  ]
 
+(*
 let example_acl =
 	let open Protocol.ACL in
     { owner = 5; other = READ; acl = [ 2, WRITE; 3, RDWR ] }
@@ -672,8 +672,8 @@ let _ =
   let suite = "xenstore" >:::
     [
 		"test_implicit_create" >:: test_implicit_create;
-(*
 		"test_directory_order" >:: test_directory_order;
+(*
 		"getperms(setperms)" >:: test_setperms_getperms;
 		"test_setperms_owner" >:: test_setperms_owner;
 		"test_mkdir" >:: test_mkdir;
