@@ -162,18 +162,18 @@ let test_mkdir () =
     dom0, tid, PathOp("/bench/local/domain/0", Read), Response.Read "";
     dom0, tid, Transaction_end true, Response.Transaction_end;
   ]
-(*
-let test_empty () =
-	(* Check that I can read an empty value *)
-        let dom0 = connect 0 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	run store [
-		dom0, none, PathOp("/a", Write ""), Response.Write;
-		dom0, none, PathOp("/a", Read), Response.Read "";
-	]
 
+let test_empty () =
+  (* Check that I can read an empty value *)
+  let dom0 = connect 0 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  run store [
+    dom0, none, PathOp("/a", Write ""), Response.Write;
+    dom0, none, PathOp("/a", Read), Response.Read "";
+  ]
+(*
 let test_directory () =
 	()
 
@@ -680,8 +680,8 @@ let _ =
 		"getperms(setperms)" >:: test_setperms_getperms;
 		"test_setperms_owner" >:: test_setperms_owner;
 		"test_mkdir" >:: test_mkdir;
-(*
 		"test_empty" >:: test_empty;
+(*
 		"test_rm" >:: test_rm;
 		"test_restrict" >:: test_restrict;
 		"test_set_target" >:: test_set_target;
