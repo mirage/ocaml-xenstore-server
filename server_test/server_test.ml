@@ -173,24 +173,24 @@ let test_empty () =
     dom0, none, PathOp("/a", Write ""), Response.Write;
     dom0, none, PathOp("/a", Read), Response.Read "";
   ]
-(*
+
 let test_directory () =
-	()
+  ()
 
 let test_rm () =
-	(* rm of a missing node from an existing parent should succeed *)
-	(* rm of a missing node from a missing parent should ENOENT *)
-        let dom0 = connect 0 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	run store [
-		dom0, none, PathOp("/a", Rm), Response.Rm;
-		dom0, none, PathOp("/a/b", Rm), Response.Error "ENOENT";
-		dom0, none, PathOp("/a", Write "hello"), Response.Write;
-		dom0, none, PathOp("/a/b", Rm), Response.Rm;
-	]
-
+  (* rm of a missing node from an existing parent should succeed *)
+  (* rm of a missing node from a missing parent should ENOENT *)
+  let dom0 = connect 0 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  run store [
+    dom0, none, PathOp("/a", Rm), Response.Rm;
+    dom0, none, PathOp("/a/b", Rm), Response.Error "ENOENT";
+    dom0, none, PathOp("/a", Write "hello"), Response.Write;
+    dom0, none, PathOp("/a/b", Rm), Response.Rm;
+  ]
+(*
 let test_restrict () =
 	(* Check that only dom0 can restrict to another domain
 	   and that it loses access to dom0-only nodes. *)
@@ -681,8 +681,8 @@ let _ =
 		"test_setperms_owner" >:: test_setperms_owner;
 		"test_mkdir" >:: test_mkdir;
 		"test_empty" >:: test_empty;
-(*
 		"test_rm" >:: test_rm;
+(*
 		"test_restrict" >:: test_restrict;
 		"test_set_target" >:: test_set_target;
 		"transactions_are_isolated" >:: test_transactions_are_isolated;
