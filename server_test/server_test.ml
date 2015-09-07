@@ -190,25 +190,26 @@ let test_rm () =
     dom0, none, PathOp("/a", Write "hello"), Response.Write;
     dom0, none, PathOp("/a/b", Rm), Response.Rm;
   ]
-(*
-let test_restrict () =
-	(* Check that only dom0 can restrict to another domain
-	   and that it loses access to dom0-only nodes. *)
-        let dom0 = connect 0 in
-        let dom3 = connect 3 in
-        let dom7 = connect 7 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	run store [
-		dom0, none, PathOp("/foo", Write "bar"), Response.Write;
-		dom0, none, PathOp("/foo", Setperms example_acl), Response.Setperms;
-		dom3, none, PathOp("/foo", Write "bar"), Response.Write;
-		dom7, none, PathOp("/foo", Write "bar"), Response.Error "EACCES";
-		dom0, none, Restrict 7, Response.Restrict;
-		dom0, none, PathOp("/foo", Write "bar"), Response.Error "EACCES";
-	]
 
+let test_restrict () =
+  (* Check that only dom0 can restrict to another domain
+     and that it loses access to dom0-only nodes. *)
+  let dom0 = connect 0 in
+  let dom3 = connect 3 in
+  let dom7 = connect 7 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  run store [
+    dom0, none, PathOp("/foo", Write "bar"), Response.Write;
+    dom0, none, PathOp("/foo", Setperms example_acl), Response.Setperms;
+    dom3, none, PathOp("/foo", Write "bar"), Response.Write;
+    dom7, none, PathOp("/foo", Write "bar"), Response.Error "EACCES";
+    dom0, none, Restrict 7, Response.Restrict;
+    dom0, none, PathOp("/foo", Write "bar"), Response.Error "EACCES";
+  ]
+
+(*
 let test_set_target () =
 	(* Check that dom0 can grant dom1 access to dom2's nodes,
 	   without which it wouldn't have access. *)
@@ -682,8 +683,8 @@ let _ =
 		"test_mkdir" >:: test_mkdir;
 		"test_empty" >:: test_empty;
 		"test_rm" >:: test_rm;
-(*
 		"test_restrict" >:: test_restrict;
+(*
 		"test_set_target" >:: test_set_target;
 		"transactions_are_isolated" >:: test_transactions_are_isolated;
 		"independent_transactions_coalesce" >:: test_independent_transactions_coalesce;
