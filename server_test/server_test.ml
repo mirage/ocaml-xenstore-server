@@ -24,16 +24,21 @@ let id x = x
 let enable_debug = ref false
 
 let empty_store () =
-  let open Irmin_unix in
-  let module DB =
-    Irmin_mem.Make(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
-  let config = Irmin_mem.config () in
-  Lwt_main.run (Xirmin.make config (module DB))
+  let t =
+    let open Irmin_unix in
+    let module DB =
+      Irmin_mem.Make(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
+    let config = Irmin_mem.config () in
+    Xirmin.make config (module DB)
+    >>= fun store ->
+    let module V = (val store: Persistence.PERSISTENCE) in
+    let module E = Effects.Make(V) in
+    return (module E: Persistence.EFFECTS) in
+  Lwt_main.run t
 
 let rpc store c tid request =
-  let module V = (val store: Persistence.PERSISTENCE) in
+  let module E = (val store: Persistence.EFFECTS) in
   let hdr = { Protocol.Header.tid; rid = 0l; ty = Protocol.Request.get_ty request; len = 0 } in
-  let module E = Effects.Make(V) in
   let domid = 0 in
   let perms = Connection.perms c in
   let send_watch_event _ _ = return () in

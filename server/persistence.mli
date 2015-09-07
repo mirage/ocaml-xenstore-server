@@ -37,3 +37,8 @@ module type PERSISTENCE = sig
 
   val unwatch: watch -> unit Lwt.t
 end
+
+module type EFFECTS = sig
+  val reply: int -> Perms.t -> Protocol.Header.t -> (string -> Protocol.Name.t -> unit Lwt.t) -> Protocol.Request.t -> (Protocol.Response.t * unit) Lwt.t
+
+end
