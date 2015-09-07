@@ -131,6 +131,20 @@ let make ?(prefer_merge=true) config db_m =
 
     let rm t path =
       (try_lwt
+        let (>>|=) m f = m >>= function
+        | `Ok x -> f x
+        | `Enoent x -> return (`Enoent x)
+        | `Einval -> return (`Einval) in
+        ( if path = Protocol.Path.empty
+          then return `Einval
+          else
+            (* If the parent doesn't exist we should return `Enoent *)
+            let parent = Protocol.Path.dirname path in
+            DB_View.mem t.v (value_of_filename parent)
+            >>= function
+            | false -> return (`Enoent parent)
+            | true -> return (`Ok ())
+        ) >>|= fun () ->
         DB_View.remove t.v (dir_of_filename path) >>= fun () ->
         DB_View.remove t.v (value_of_filename path) >>= fun () ->
         DB_View.remove t.v (order_of_filename path) >>= fun () ->

@@ -27,7 +27,7 @@ module type PERSISTENCE = sig
 
   val mem: t -> Protocol.Path.t -> bool Lwt.t
 
-  val rm: t -> Protocol.Path.t -> [ `Ok of unit ] Lwt.t
+  val rm: t -> Protocol.Path.t -> [ `Ok of unit | `Einval | `Enoent of Protocol.Path.t ] Lwt.t
 
   val merge: t -> string -> bool Lwt.t
 
