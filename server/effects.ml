@@ -20,17 +20,17 @@ module Make(V: PERSISTENCE) = struct
   (* Every write or mkdir will recursively create parent nodes if they
      don't already exist. *)
   let rec mkdir v perms path creator =
-    V.mem v path >>= function
-    | true ->
-      return (`Ok ())
-    | false ->
+    V.read v perms path >>= function
+    | `Ok node -> return (`Ok node)
+    | `Eacces path -> return (`Eacces path)
+    | `Enoent _ ->
       (* The root node has been created in Main, otherwise we'd blow the
          stack here. *)
       let dirname = Path.dirname path in
-      mkdir v perms dirname creator >>|= fun () ->
-      V.read v perms dirname >>|= fun node ->
-      V.write v perms path Node.({ node with creator; value = "" }) >>|= fun () ->
-      return (`Ok ())
+      mkdir v perms dirname creator >>|= fun node ->
+      let node' = Node.({ node with creator; value = "" }) in
+      V.write v perms path node' >>|= fun () ->
+      return (`Ok node')
 
   (* Rm is recursive *)
   let rec rm v path =
@@ -81,26 +81,32 @@ module Make(V: PERSISTENCE) = struct
     V.read v perms path >>|= fun node ->
     return (`Ok (Response.Getperms node.Node.perms, nothing))
   | Request.Setperms acl ->
-    V.read v perms path >>|= fun node ->
-    V.write v perms path { node with Node.perms = acl} >>|= fun () ->
+    V.setperms v perms path acl >>|= fun () ->
     return (`Ok (Response.Setperms, nothing))
   | Request.Directory ->
     V.list v path >>|= fun names ->
     return (`Ok (Response.Directory names, nothing))
   | Request.Write value ->
-    let dirname = Path.dirname path in
-    mkdir v perms dirname domid >>|= fun () ->
-    V.read v perms dirname >>|= fun node ->
+    ( V.exists v perms path
+      >>|= function
+      | false ->
+        let dirname = Path.dirname path in
+        mkdir v perms dirname domid
+      | true ->
+        V.read v perms path
+        >>|= fun node ->
+        return (`Ok node)
+    ) >>|= fun node ->
     V.write v perms path Node.({ node with creator = domid; value }) >>|= fun () ->
     return (`Ok (Response.Write, nothing))
   | Request.Mkdir ->
-    mkdir v perms path domid >>|= fun () ->
+    mkdir v perms path domid >>|= fun _ ->
     return (`Ok (Response.Mkdir, nothing))
   | Request.Rm ->
     rm v path >>|= fun () ->
     return (`Ok (Response.Rm, nothing))
 
-  let reply_or_fail domid perms hdr send_watch_event req = match req with
+  let reply_or_fail c domid perms hdr send_watch_event req = match req with
   | Request.PathOp (path, op) ->
     let path = Path.of_string path in
     with_transaction domid hdr req (pathop domid perms path op)
@@ -151,10 +157,18 @@ module Make(V: PERSISTENCE) = struct
     if Hashtbl.mem watches (name, token)
     then Hashtbl.remove watches (name, token);
     return (`Ok (Response.Unwatch, nothing))
+  | Request.Restrict domid ->
+    if not(Perms.has perms Perms.RESTRICT)
+    then return (`Eacces Protocol.Path.empty)
+    else begin
+      let perms = Connection.perms c in
+      Connection.set_perms c (Perms.restrict perms domid);
+      return (`Ok (Response.Restrict, nothing))
+    end
   | _ ->
     return (`Not_implemented (Op.to_string hdr.Header.ty))
 
-  let reply domid perms hdr send_watch_event req =
+  let reply c domid perms hdr send_watch_event req =
     debug "<-  rid %ld tid %ld %s"
       hdr.Header.rid hdr.Header.tid
       (Sexp.to_string (Request.sexp_of_t req));
@@ -164,7 +178,7 @@ module Make(V: PERSISTENCE) = struct
 
     Lwt.catch
       (fun () ->
-        reply_or_fail domid perms hdr send_watch_event req >>= function
+        reply_or_fail c domid perms hdr send_watch_event req >>= function
         | `Ok x -> return (x, None)
         | `Enoent path -> errorwith ~error_info:(Some (Path.to_string path)) "ENOENT"
         | `Eacces path -> errorwith ~error_info:(Some (Path.to_string path)) "EACCES"

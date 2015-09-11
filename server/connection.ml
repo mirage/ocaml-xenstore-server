@@ -14,7 +14,6 @@
 open Sexplib.Std
 open Lwt
 open Xenstore
-open Persistence
 
 let debug fmt = Logging.debug "connection" fmt
 let info  fmt = Logging.info  "connection" fmt
@@ -26,7 +25,7 @@ end
 
 type t = {
   domid: int;
-  perms: Perms.t;
+  mutable perms: Perms.t;
 }
 
 let create (uri, domid) =
@@ -36,6 +35,8 @@ let create (uri, domid) =
 let index _ = -1
 
 let perms t = t.perms
+
+let set_perms t perms = t.perms <- perms
 
 let destroy t =
   return ()

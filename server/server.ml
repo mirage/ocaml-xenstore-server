@@ -140,7 +140,7 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
 (*
             E.reply v (Some limits) perm c hdr request >>= fun (response, side_effects) ->
 *)
-            E.reply domid perms hdr send_watch_event request >>= fun (response, side_effects) ->
+            E.reply c domid perms hdr send_watch_event request >>= fun (response, side_effects) ->
             let hdr = Protocol.({ hdr with Header.ty = Response.get_ty response}) in
             return (hdr, response, side_effects, read_ofs)
           | read_ofs, `Error msg ->

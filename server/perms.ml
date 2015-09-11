@@ -73,8 +73,7 @@ type permission =
 	| RESTRICT
 	| CONFIGURE
 
-let has (t: t) p =
-	if not(is_dom0 t) then raise Permission_denied
+let has (t: t) p = is_dom0 t
 
 (* check if owner of the current connection and of the current node are the same *)
 let check_owner (connection:t) (node:Protocol.ACL.t) =

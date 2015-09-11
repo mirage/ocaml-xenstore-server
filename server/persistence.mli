@@ -19,11 +19,15 @@ module type PERSISTENCE = sig
 
   val create: unit -> t Lwt.t
 
+  val exists: t -> Perms.t -> Protocol.Path.t -> [ `Ok of bool ] Lwt.t
+
   val read: t -> Perms.t -> Protocol.Path.t -> [ `Ok of Node.contents | `Enoent of Protocol.Path.t | `Eacces of Protocol.Path.t ] Lwt.t
 
   val list: t -> Protocol.Path.t -> [ `Ok of string list | `Enoent of Protocol.Path.t ] Lwt.t
 
   val write: t -> Perms.t ->  Protocol.Path.t -> Node.contents -> [ `Ok of unit | `Eacces of Protocol.Path.t ] Lwt.t
+
+  val setperms: t -> Perms.t -> Protocol.Path.t -> Protocol.ACL.t -> [ `Ok of unit | `Enoent of Protocol.Path.t | `Eacces of Protocol.Path.t ] Lwt.t 
 
   val mem: t -> Protocol.Path.t -> bool Lwt.t
 
@@ -39,6 +43,6 @@ module type PERSISTENCE = sig
 end
 
 module type EFFECTS = sig
-  val reply: int -> Perms.t -> Protocol.Header.t -> (string -> Protocol.Name.t -> unit Lwt.t) -> Protocol.Request.t -> (Protocol.Response.t * unit) Lwt.t
+  val reply: Connection.t -> int -> Perms.t -> Protocol.Header.t -> (string -> Protocol.Name.t -> unit Lwt.t) -> Protocol.Request.t -> (Protocol.Response.t * unit) Lwt.t
 
 end

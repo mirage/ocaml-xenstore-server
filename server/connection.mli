@@ -12,7 +12,6 @@
  * GNU Lesser General Public License for more details.
  *)
 open Xenstore
-open Persistence
 
 module Watch : sig
   type t = Protocol.Name.t * string with sexp
@@ -27,6 +26,8 @@ val index: t -> int
 
 val perms: t -> Perms.t
 (** The premissions associated with a connection *)
+
+val set_perms: t -> Perms.t -> unit
 
 val destroy: t -> unit Lwt.t
 (** [destroy v t] destroys any connection associated with [t] *)

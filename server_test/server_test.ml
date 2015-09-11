@@ -42,7 +42,7 @@ let rpc store c tid request =
   let domid = 0 in
   let perms = Connection.perms c in
   let send_watch_event _ _ = return () in
-  E.reply domid perms hdr send_watch_event request
+  E.reply c domid perms hdr send_watch_event request
 
 let run store (sequence: (Connection.t * int32 * Protocol.Request.t * Protocol.Response.t) list) =
   let open Lwt in

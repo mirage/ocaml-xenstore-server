@@ -80,8 +80,41 @@ let make ?(prefer_merge=true) config db_m =
       (try_lwt
         DB_View.mem t.v (value_of_filename path)
        with e -> (error "%s" (Printexc.to_string e); return false))
-    let write t perms path contents =
+
+    let write t (perms: Perms.t) path contents =
         let parent = Protocol.Path.dirname path in
+        (* If the node exists then check the ACLs in it. If the node doesn't
+           exist then we must check the parent. *)
+        let value_path = value_of_filename path in
+
+        let (>>|=) m f = m >>= function
+          | `Eacces x -> return (`Eacces x)
+          | `Ok x -> f x in
+
+        ( if path = Protocol.Path.empty
+          then return (`Ok ())
+          else DB_View.read t.v value_path
+          >>= function
+          | Some x ->
+            let contents = Node.contents_of_sexp (Sexp.of_string x) in
+            if Perms.check perms Perms.WRITE contents.Node.perms
+            then return (`Ok ())
+            else return (`Eacces path)
+          | None ->
+            ( DB_View.read t.v (value_of_filename parent)
+              >>= function
+              | Some x ->
+                let contents = Node.contents_of_sexp (Sexp.of_string x) in
+                if Perms.check perms Perms.WRITE contents.Node.perms
+                then return (`Ok ())
+                else return (`Eacces parent)
+              | None ->
+                (* This should never happen by construction *)
+                Printf.fprintf stderr "write: neither a path %s nor its parent %s exists\n%!" (Protocol.Path.to_string path) (Protocol.Path.to_string parent);
+                assert false
+            )
+        ) >>|= fun () ->
+        (* We store the creation order in a key next to the directory *)
         let order_path = order_of_filename parent in
         ( DB_View.read t.v order_path
           >>= function
@@ -94,8 +127,21 @@ let make ?(prefer_merge=true) config db_m =
             DB_View.update t.v order_path (Sexp.to_string (sexp_of_order order'))
           end else return ()
         ) >>= fun () ->
-        DB_View.update t.v (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents)) >>= fun () ->
+        DB_View.update t.v value_path (Sexp.to_string (Node.sexp_of_contents contents)) >>= fun () ->
         return (`Ok ())
+    let setperms t perms path acl =
+      let key = value_of_filename path in
+      DB_View.read t.v key >>= function
+      | None -> return (`Enoent path)
+      | Some x ->
+        let contents = Node.contents_of_sexp (Sexp.of_string x) in
+        if Perms.check perms Perms.CHANGE_ACL contents.Node.perms then begin
+          let contents' = { contents with Node.perms = acl } in
+          let x' = Sexp.to_string (Node.sexp_of_contents contents') in
+          DB_View.update t.v key (Sexp.to_string (Node.sexp_of_contents contents'))
+          >>= fun () ->
+          return (`Ok ())
+        end else return (`Eacces path)
     let list t path =
       (try_lwt
         (* TODO: differentiate a directory which doesn't exist from an empty directory
@@ -171,6 +217,12 @@ let make ?(prefer_merge=true) config db_m =
           then return (`Ok contents)
           else return (`Eacces path)
        with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
+    let exists t perms path =
+      read t perms path
+      >>= function
+      | `Ok _ -> return (`Ok true)
+      | `Enoent _ -> return (`Ok false)
+      | `Eacces _ -> return (`Ok false)
     let merge t msg =
       ( if prefer_merge then begin
             DB_View.merge_path (db msg) [] t.v >>= function
@@ -245,8 +297,9 @@ let make ?(prefer_merge=true) config db_m =
   (* Create the root node *)
   V.create () >>= fun v ->
 
-  let perms = Protocol.ACL.( { owner = 0; other = NONE; acl = [] }) in
-  fail_on_error (V.write v perms Protocol.Path.empty Node.({ creator = 0; perms; value = "" }))
+  let acl = Protocol.ACL.( { owner = 0; other = NONE; acl = [] }) in
+  let perms = Perms.of_domain 0 in
+  fail_on_error (V.write v perms Protocol.Path.empty Node.({ creator = 0; perms = acl; value = "" }))
   >>= fun () ->
   V.merge v "Adding root node\n\nA xenstore tree always has a root node, owned
   by domain 0." >>= fun ok ->
