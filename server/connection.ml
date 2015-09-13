@@ -24,13 +24,18 @@ module Watch = struct
 end
 
 type t = {
+  uri: Uri.t;
   domid: int;
   mutable perms: Perms.t;
 }
 
+let all = Hashtbl.create 7
+
 let create (uri, domid) =
   let perms = Perms.of_domain domid in
-  return { domid; perms }
+  let c = { uri; domid; perms } in
+  Hashtbl.replace all uri c;
+  return c
 
 let index _ = -1
 
@@ -38,7 +43,11 @@ let perms t = t.perms
 
 let set_perms t perms = t.perms <- perms
 
+let find_by_domid domid =
+  Hashtbl.fold (fun _ t acc -> if t.domid = domid then t :: acc else acc) all []
+
 let destroy t =
+  Hashtbl.remove all t.uri;
   return ()
 (*
 module Watch_events = PQueue.Make(Watch)

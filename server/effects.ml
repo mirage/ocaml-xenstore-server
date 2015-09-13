@@ -165,6 +165,16 @@ module Make(V: PERSISTENCE) = struct
       Connection.set_perms c (Perms.restrict perms domid);
       return (`Ok (Response.Restrict, nothing))
     end
+  | Request.Set_target(mine, yours) ->
+    if not(Perms.has perms Perms.SET_TARGET)
+    then return (`Eacces Protocol.Path.empty)
+    else begin
+      List.iter (fun c ->
+        let perms = Connection.perms c in
+        Connection.set_perms c (Perms.set_target perms yours)
+      ) (Connection.find_by_domid mine);
+      return (`Ok (Response.Set_target, nothing))
+    end
   | _ ->
     return (`Not_implemented (Op.to_string hdr.Header.ty))
 

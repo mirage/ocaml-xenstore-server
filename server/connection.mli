@@ -24,6 +24,8 @@ val create: (Uri.t * int) -> t Lwt.t
 val index: t -> int
 (** a unique id associated with a connection *)
 
+val find_by_domid: int -> t list
+
 val perms: t -> Perms.t
 (** The premissions associated with a connection *)
 

@@ -209,7 +209,6 @@ let test_restrict () =
     dom0, none, PathOp("/foo", Write "bar"), Response.Error "EACCES";
   ]
 
-(*
 let test_set_target () =
 	(* Check that dom0 can grant dom1 access to dom2's nodes,
 	   without which it wouldn't have access. *)
@@ -226,6 +225,7 @@ let test_set_target () =
 		dom7, none, PathOp("/foo", Write "bar"), Response.Write;
 	]
 
+(*
 let test_transactions_are_isolated () =
 	(* Check that other connections cannot see the nodes created
 	   within an uncommitted transaction *)
@@ -684,8 +684,8 @@ let _ =
 		"test_empty" >:: test_empty;
 		"test_rm" >:: test_rm;
 		"test_restrict" >:: test_restrict;
-(*
 		"test_set_target" >:: test_set_target;
+(*
 		"transactions_are_isolated" >:: test_transactions_are_isolated;
 		"independent_transactions_coalesce" >:: test_independent_transactions_coalesce;
 		"device_create_coalesce" >:: test_device_create_coalesce;
