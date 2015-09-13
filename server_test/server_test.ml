@@ -225,7 +225,6 @@ let test_set_target () =
 		dom7, none, PathOp("/foo", Write "bar"), Response.Write;
 	]
 
-(*
 let test_transactions_are_isolated () =
 	(* Check that other connections cannot see the nodes created
 	   within an uncommitted transaction *)
@@ -241,7 +240,7 @@ let test_transactions_are_isolated () =
 		dom0, tid, Transaction_end true, Response.Transaction_end;
 		dom0, none, PathOp("/foo", Read), Response.Read "bar";
 	]
-
+(*
 let test_independent_transactions_coalesce () =
 	(* Check that two parallel, unrelated transactions can be
 	   coalesced properly *)
@@ -685,8 +684,8 @@ let _ =
 		"test_rm" >:: test_rm;
 		"test_restrict" >:: test_restrict;
 		"test_set_target" >:: test_set_target;
-(*
 		"transactions_are_isolated" >:: test_transactions_are_isolated;
+(*
 		"independent_transactions_coalesce" >:: test_independent_transactions_coalesce;
 		"device_create_coalesce" >:: test_device_create_coalesce;
 		"test_transactions_really_do_conflict" >:: test_transactions_really_do_conflict;
