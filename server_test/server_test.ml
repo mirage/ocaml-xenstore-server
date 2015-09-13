@@ -287,7 +287,7 @@ let test_device_create_coalesce () =
 		dom0, none, PathOp("/local/domain/0/backend/vbd/1/51712", Read), Response.Read "hello";
 		dom0, none, PathOp("/local/domain/0/backend/vbd/2/51712", Read), Response.Read "hello";
 	]
-
+*)
 let test_transactions_really_do_conflict () =
 	(* Check that transactions that really can't interleave are aborted *)
         let dom0 = connect 0 in
@@ -306,7 +306,7 @@ let test_transactions_really_do_conflict () =
 		dom0, none, PathOp("/a/b", Read), Response.Read "hello"
 	]
 
-
+(*
 let string_of_watch_events watch_events =
 	String.concat "; " (List.map (fun (k, v) -> Protocol.Name.to_string k ^ ", " ^ v) watch_events)
 
@@ -502,7 +502,7 @@ let test_no_watch_no_error () =
 let test_bounded_watch_events () =
 	(* Check that the per-connection watch event queue is bounded *)
 	()
-
+*)
 let test_rm_root () =
         (* Check that deleting / fails *)
         let dom0 = connect 0 in
@@ -514,7 +514,7 @@ let test_rm_root () =
 		dom0, none, PathOp("/", Rm), Response.Error "EINVAL";
 	]
 
-
+(*
 let test_quota () =
 	(* Check that node creation and destruction changes a quota *)
         let dom0 = connect 0 in
@@ -688,13 +688,17 @@ let _ =
 (*
 		"independent_transactions_coalesce" >:: test_independent_transactions_coalesce;
 		"device_create_coalesce" >:: test_device_create_coalesce;
+*)
 		"test_transactions_really_do_conflict" >:: test_transactions_really_do_conflict;
+(*
 		"test_simple_watches" >:: test_simple_watches;
 		"test_relative_watches" >:: test_relative_watches;
 (*		"test_watches_read_perm" >:: test_watches_read_perm; *)
 		"test_transaction_watches" >:: test_transaction_watches;
 		"test_introduce_watches" >:: test_introduce_watches;
+*)
                 "test_rm_root" >:: test_rm_root;
+(*
 		"test_quota" >:: test_quota;
                 "test_quota_ls" >:: test_quota_ls;
 		"test_quota_transaction" >:: test_quota_transaction;
