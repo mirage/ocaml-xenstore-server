@@ -137,6 +137,8 @@ module Make(V: PERSISTENCE) = struct
     | Absolute path ->
       V.watch path (fun path -> send_watch_event token (Protocol.Name.Absolute path))
       >>= fun w ->
+      send_watch_event token (Protocol.Name.Absolute path)
+      >>= fun () ->
       Hashtbl.replace watches (name, token) w;
       return (`Ok (Response.Watch, nothing))
     | Relative path ->
@@ -144,6 +146,8 @@ module Make(V: PERSISTENCE) = struct
       let absolute = Protocol.Name.(to_path (resolve name (Absolute domainpath))) in
       V.watch absolute (fun path -> send_watch_event token (Protocol.Name.(relative (Absolute path) (Absolute domainpath))))
       >>= fun w ->
+      send_watch_event token (Protocol.Name.Relative path)
+      >>= fun () ->
       Hashtbl.replace watches (name, token) w;
       return (`Ok (Response.Watch, nothing))
     | Predefined IntroduceDomain ->
