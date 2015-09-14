@@ -240,7 +240,7 @@ let test_transactions_are_isolated () =
 		dom0, tid, Transaction_end true, Response.Transaction_end;
 		dom0, none, PathOp("/foo", Read), Response.Read "bar";
 	]
-(*
+
 let test_independent_transactions_coalesce () =
 	(* Check that two parallel, unrelated transactions can be
 	   coalesced properly *)
@@ -287,7 +287,7 @@ let test_device_create_coalesce () =
 		dom0, none, PathOp("/local/domain/0/backend/vbd/1/51712", Read), Response.Read "hello";
 		dom0, none, PathOp("/local/domain/0/backend/vbd/2/51712", Read), Response.Read "hello";
 	]
-*)
+
 let test_transactions_really_do_conflict () =
 	(* Check that transactions that really can't interleave are aborted *)
         let dom0 = connect 0 in
@@ -676,7 +676,9 @@ let _ =
   let suite = "xenstore" >:::
     [
 		"test_implicit_create" >:: test_implicit_create;
+(*
 		"test_directory_order" >:: test_directory_order;
+*)
 		"getperms(setperms)" >:: test_setperms_getperms;
 		"test_setperms_owner" >:: test_setperms_owner;
 		"test_mkdir" >:: test_mkdir;
@@ -685,10 +687,8 @@ let _ =
 		"test_restrict" >:: test_restrict;
 		"test_set_target" >:: test_set_target;
 		"transactions_are_isolated" >:: test_transactions_are_isolated;
-(*
 		"independent_transactions_coalesce" >:: test_independent_transactions_coalesce;
 		"device_create_coalesce" >:: test_device_create_coalesce;
-*)
 		"test_transactions_really_do_conflict" >:: test_transactions_really_do_conflict;
 (*
 		"test_simple_watches" >:: test_simple_watches;

@@ -114,6 +114,8 @@ let make ?(prefer_merge=true) config db_m =
                 assert false
             )
         ) >>|= fun () ->
+(* XXX this causes merge conflicts so I need a custom merge function *)
+(*
         (* We store the creation order in a key next to the directory *)
         let order_path = order_of_filename parent in
         ( DB_View.read t.v order_path
@@ -127,6 +129,7 @@ let make ?(prefer_merge=true) config db_m =
             DB_View.update t.v order_path (Sexp.to_string (sexp_of_order order'))
           end else return ()
         ) >>= fun () ->
+*)
         DB_View.update t.v value_path (Sexp.to_string (Node.sexp_of_contents contents)) >>= fun () ->
         return (`Ok ())
     let setperms t perms path acl =
