@@ -488,7 +488,6 @@ let test_transaction_watches () =
 	];
 	assert_watches dom0 [ ("/a", "token") ]
 
-(*
 let test_introduce_watches () =
 	(* Check that @introduceDomain watches appear on introduce *)
         let dom0 = connect 0 in
@@ -499,13 +498,14 @@ let test_introduce_watches () =
 		dom0, none, Watch ("@introduceDomain", "token"), Response.Watch;
 	];
 	assert_watches dom0 [ ("@introduceDomain", "token") ];
-        Lwt_main.run (Connection.Watch_events.clear (Connection.watch_events dom0));
+	clear_watches dom0;
 	assert_watches dom0 [];
 	run store [
 		dom0, none, Introduce(5, 5n, 5), Response.Introduce;
 	];
 	assert_watches dom0 [ ("@introduceDomain", "token") ]
 
+(*
 let test_release_watches () =
 	(* Check that @releaseDomain watches appear on introduce *)
 	()
@@ -713,9 +713,7 @@ let _ =
 		"test_relative_watches" >:: test_relative_watches;
 (*		"test_watches_read_perm" >:: test_watches_read_perm; *)
 		"test_transaction_watches" >:: test_transaction_watches;
-(*
 		"test_introduce_watches" >:: test_introduce_watches;
-*)
                 "test_rm_root" >:: test_rm_root;
 (*
 		"test_quota" >:: test_quota;

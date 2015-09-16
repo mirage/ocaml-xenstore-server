@@ -32,6 +32,22 @@ module Make(V: PERSISTENCE) = struct
       V.write v perms path node' >>|= fun () ->
       return (`Ok node')
 
+  (* Write a path and perform the implicit path creation *)
+  let write v perms path creator value =
+    ( V.exists v perms path
+      >>|= function
+      | false ->
+        let dirname = Path.dirname path in
+        mkdir v perms dirname creator
+      | true ->
+        V.read v perms path
+        >>|= fun node ->
+        return (`Ok node)
+    ) >>|= fun node ->
+    V.write v perms path Node.({ node with creator; value })
+    >>|= fun () ->
+    return (`Ok ())
+
   (* Rm is recursive *)
   let rec rm v path =
     V.list v path >>|= fun names ->
@@ -69,6 +85,8 @@ module Make(V: PERSISTENCE) = struct
       f v
     end
 
+  let introduced_domains_path = Protocol.Path.of_string_list [ "tools"; "xenstored"; "introduced-domains" ]
+
   let watches = Hashtbl.create 7
 
   (* The 'path operations' are the ones which can be done in transactions.
@@ -87,17 +105,8 @@ module Make(V: PERSISTENCE) = struct
     V.list v path >>|= fun names ->
     return (`Ok (Response.Directory names, nothing))
   | Request.Write value ->
-    ( V.exists v perms path
-      >>|= function
-      | false ->
-        let dirname = Path.dirname path in
-        mkdir v perms dirname domid
-      | true ->
-        V.read v perms path
-        >>|= fun node ->
-        return (`Ok node)
-    ) >>|= fun node ->
-    V.write v perms path Node.({ node with creator = domid; value }) >>|= fun () ->
+    write v perms path domid value
+    >>|= fun () ->
     return (`Ok (Response.Write, nothing))
   | Request.Mkdir ->
     mkdir v perms path domid >>|= fun _ ->
@@ -150,10 +159,14 @@ module Make(V: PERSISTENCE) = struct
       >>= fun () ->
       Hashtbl.replace watches (name, token) w;
       return (`Ok (Response.Watch, nothing))
-    | Predefined IntroduceDomain ->
-      return (`Not_implemented "introduce domain")
-    | Predefined ReleaseDomain ->
-      return (`Not_implemented "release domain")
+    | Predefined (IntroduceDomain | ReleaseDomain) as name ->
+      (* We store connection information in the tree *)
+      V.watch introduced_domains_path (fun _ -> send_watch_event token name)
+      >>= fun w ->
+      send_watch_event token name
+      >>= fun () ->
+      Hashtbl.replace watches (name, token) w;
+      return (`Ok (Response.Watch, nothing))
     end
   | Request.Unwatch (path, token) ->
     let open Protocol.Name in
@@ -179,6 +192,16 @@ module Make(V: PERSISTENCE) = struct
       ) (Connection.find_by_domid mine);
       return (`Ok (Response.Set_target, nothing))
     end
+  | Request.Introduce(domid', mfn, port) ->
+    with_transaction domid hdr req
+      (fun v ->
+        let path = Protocol.Path.(concat introduced_domains_path (of_string_list [ string_of_int domid' ])) in
+        write v perms Protocol.Path.(concat path (of_string_list [ "mfn" ])) domid (Nativeint.to_string mfn)
+        >>|= fun () ->
+        write v perms Protocol.Path.(concat path (of_string_list [ "port" ])) domid (string_of_int port)
+        >>|= fun () ->
+        return (`Ok (Response.Introduce, nothing))
+      )
   | _ ->
     return (`Not_implemented (Op.to_string hdr.Header.ty))
 
