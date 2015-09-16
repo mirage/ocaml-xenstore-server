@@ -285,7 +285,7 @@ let make ?(prefer_merge=true) config db_m =
           Lwt_list.iter_s
             (fun key ->
               info "Watchevent (added): %s/%s" (Protocol.Path.to_string path) (String.concat "/" key);
-              callback_fn (Protocol.Path.of_string_list key); 
+              callback_fn (Protocol.Path.(concat path (of_string_list key)));
             ) (KeySet.fold (fun elt acc -> elt :: acc) all [])
       ) >>= fun unwatch_dir ->
       DB.watch_key (db "") (value_of_filename path) (fun _ ->
