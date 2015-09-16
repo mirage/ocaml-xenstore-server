@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 360ac8a87c637e4ddd68bcd03186a97a)
+# DO NOT EDIT (digest: f762a24e853a3e513ea52685b6c47713)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -45,6 +45,7 @@ true: annot, bin_annot
 <server/*.ml{,i,y}>: pkg_lwt
 <server/*.ml{,i,y}>: pkg_lwt.syntax
 <server/*.ml{,i,y}>: pkg_sexplib
+<server/*.ml{,i,y}>: pkg_sexplib.syntax
 <server/*.ml{,i,y}>: pkg_uri
 <server/*.ml{,i,y}>: use_xenstore
 # Library xenstore_unix
@@ -87,6 +88,7 @@ true: annot, bin_annot
 <server_test/server_test.{native,byte}>: pkg_lwt.syntax
 <server_test/server_test.{native,byte}>: pkg_oUnit
 <server_test/server_test.{native,byte}>: pkg_sexplib
+<server_test/server_test.{native,byte}>: pkg_sexplib.syntax
 <server_test/server_test.{native,byte}>: pkg_uri
 <server_test/server_test.{native,byte}>: use_xenstore
 <server_test/server_test.{native,byte}>: use_xenstored
@@ -102,6 +104,7 @@ true: annot, bin_annot
 <server_test/binary.{native,byte}>: pkg_lwt.unix
 <server_test/binary.{native,byte}>: pkg_oUnit
 <server_test/binary.{native,byte}>: pkg_sexplib
+<server_test/binary.{native,byte}>: pkg_sexplib.syntax
 <server_test/binary.{native,byte}>: pkg_uri
 <server_test/binary.{native,byte}>: use_xenstore
 <server_test/binary.{native,byte}>: use_xenstore_unix
@@ -116,6 +119,7 @@ true: annot, bin_annot
 <server_test/*.ml{,i,y}>: pkg_lwt.unix
 <server_test/*.ml{,i,y}>: pkg_oUnit
 <server_test/*.ml{,i,y}>: pkg_sexplib
+<server_test/*.ml{,i,y}>: pkg_sexplib.syntax
 <server_test/*.ml{,i,y}>: pkg_uri
 <server_test/*.ml{,i,y}>: use_xenstore
 <server_test/*.ml{,i,y}>: use_xenstore_unix
@@ -135,6 +139,7 @@ true: annot, bin_annot
 <userspace/main.{native,byte}>: pkg_lwt.syntax
 <userspace/main.{native,byte}>: pkg_lwt.unix
 <userspace/main.{native,byte}>: pkg_sexplib
+<userspace/main.{native,byte}>: pkg_sexplib.syntax
 <userspace/main.{native,byte}>: pkg_shared-memory-ring
 <userspace/main.{native,byte}>: pkg_shared-memory-ring.xenstore
 <userspace/main.{native,byte}>: pkg_uri
@@ -156,6 +161,7 @@ true: annot, bin_annot
 <userspace/*.ml{,i,y}>: pkg_lwt.syntax
 <userspace/*.ml{,i,y}>: pkg_lwt.unix
 <userspace/*.ml{,i,y}>: pkg_sexplib
+<userspace/*.ml{,i,y}>: pkg_sexplib.syntax
 <userspace/*.ml{,i,y}>: pkg_shared-memory-ring
 <userspace/*.ml{,i,y}>: pkg_shared-memory-ring.xenstore
 <userspace/*.ml{,i,y}>: pkg_uri
@@ -177,6 +183,7 @@ true: annot, bin_annot
 "userspace/domains_stubs.c": pkg_lwt.syntax
 "userspace/domains_stubs.c": pkg_lwt.unix
 "userspace/domains_stubs.c": pkg_sexplib
+"userspace/domains_stubs.c": pkg_sexplib.syntax
 "userspace/domains_stubs.c": pkg_shared-memory-ring
 "userspace/domains_stubs.c": pkg_shared-memory-ring.xenstore
 "userspace/domains_stubs.c": pkg_uri
