@@ -314,7 +314,7 @@ let test_transactions_really_do_conflict () =
 
 let assert_watches c expected =
   let q = if Hashtbl.mem watch_queues c then Hashtbl.find watch_queues c else Queue.create () in
-  let got = Queue.fold (fun acc x -> x :: acc) [] q in
+  let got = Queue.fold (fun acc x -> if List.mem x acc then acc else x :: acc) [] q in
   let got' = List.map (fun (k, v) -> Protocol.Name.to_string k, v) got in
   (* Ignore any extra events: these are harmless. Note this is a change
      between the old implementation and the new Irmin version. *)
@@ -415,7 +415,6 @@ let test_simple_watches () =
 	];
 	assert_watches dom0 []
 
-(*
 let test_relative_watches () =
 	(* Check that watches for relative paths *)
         let dom0 = connect 0 in
@@ -429,13 +428,13 @@ let test_relative_watches () =
 		dom0, none, Watch("device", "token"), Response.Watch;
 	];
 	assert_watches dom0 [ "device", "token" ];
-        Lwt_main.run (Connection.Watch_events.clear (Connection.watch_events dom0));
+	clear_watches dom0;
 	assert_watches dom0 [];
 	run store [
 		dom0, none, PathOp("/local/domain/0/device/vbd", Write "hello"), Response.Write;
 	];
 	assert_watches dom0 [ "device/vbd", "token" ]
-
+(*
 let test_watches_read_perm () =
 	(* Check that a connection only receives a watch if it
        can read the node that was modified. *)
@@ -709,8 +708,8 @@ let _ =
 		"device_create_coalesce" >:: test_device_create_coalesce;
 		"test_transactions_really_do_conflict" >:: test_transactions_really_do_conflict;
 		"test_simple_watches" >:: test_simple_watches;
-(*
 		"test_relative_watches" >:: test_relative_watches;
+(*
 (*		"test_watches_read_perm" >:: test_watches_read_perm; *)
 		"test_transaction_watches" >:: test_transaction_watches;
 		"test_introduce_watches" >:: test_introduce_watches;
