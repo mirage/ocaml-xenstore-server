@@ -87,10 +87,6 @@ let ensure_directory_exists dir_needed =
       fail (Failure "directory does not exist")
     end else return ()
 
-module type DB_S = Irmin.S
-  with type key = Irmin.Contents.String.Path.t
-   and type value = string
-
 let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_merge () =
   let open Irmin_unix in
   ( match irmin_path with
@@ -99,114 +95,18 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
     let module DB =
       Irmin_mem.Make(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
     let config = Irmin_mem.config () in
-    return (config, (module DB: DB_S))
+    return (config, (module DB: Xirmin.DB_S))
   | Some x ->
     let module DB =
       Irmin_git.FS(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
     let config = Irmin_git.config ~root:x ~bare:true () in
-    return (config, (module DB: DB_S))
+    return (config, (module DB: Xirmin.DB_S))
   ) >>= fun (config, db_m) ->
-  let module DB = (val db_m: DB_S) in
 
-  DB.create config Irmin_unix.task >>= fun db ->
-  (* view is no longer embedded in S_MAKER *)
-  let module DB_View = Irmin.View(DB) in
-  let module V = struct
-    type t = {
-      v: DB_View.t;
-    }
+  Xirmin.make ~prefer_merge config db_m
+  >>= fun v_m ->
+  let module V = (val v_m : Persistence.PERSISTENCE) in
 
-    let dir_suffix = ".dir"
-    let value_suffix = ".value"
-
-    let root = "/"
-
-    let value_of_filename path = match List.rev (Protocol.Path.to_string_list path) with
-    | [] -> [ root ]
-    | file :: dirs -> root :: (List.rev ((file ^ value_suffix) :: (List.map (fun x -> x ^ dir_suffix) dirs)))
-
-    let dir_of_filename path =
-      root :: (List.rev (List.map (fun x -> x ^ dir_suffix) (List.rev (Protocol.Path.to_string_list path))))
-
-    let remove_suffix suffix x =
-      let suffix' = String.length suffix and x' = String.length x in
-      String.sub x 0 (x' - suffix')
-    let endswith suffix x =
-      let suffix' = String.length suffix and x' = String.length x in
-      suffix' <= x' && (String.sub x (x' - suffix') suffix' = suffix)
-
-    let create () =
-      DB_View.of_path (db "") [] >>= fun v ->
-      return { v }
-    let mem t path =
-      (try_lwt
-        DB_View.mem t.v (value_of_filename path)
-       with e -> (error "%s" (Printexc.to_string e); return false))
-    let write t path contents =
-      (try_lwt
-        DB_View.update t.v (value_of_filename path) (Sexp.to_string (Node.sexp_of_contents contents)) >>= fun () ->
-        return (`Ok ())
-      with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
-    let list t path =
-      (try_lwt
-        (* TODO: differentiate a directory which doesn't exist from an empty directory
-        DB.View.read (value_of_filename path) >>= function
-        | None -> return (`Enoent path)
-        | Some _ ->
-        *)
-          DB_View.list t.v (dir_of_filename path) >>= fun keys ->
-          let union x xs = if not(List.mem x xs) then x :: xs else xs in
-          return (`Ok (List.fold_left (fun acc x -> match (List.rev x) with
-            | basename :: _ ->
-              if endswith dir_suffix basename
-              then union (remove_suffix dir_suffix basename) acc
-              else
-                if endswith value_suffix basename
-                then union (remove_suffix value_suffix basename) acc
-                else acc
-            | [] -> acc
-          ) [] keys))
-      with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
-
-    let rm t path =
-      (try_lwt
-        DB_View.remove t.v (dir_of_filename path) >>= fun () ->
-        DB_View.remove t.v (value_of_filename path) >>= fun () ->
-        return (`Ok ())
-      with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
-    let read t path =
-      (try_lwt
-        DB_View.read t.v (value_of_filename path) >>= function
-        | None -> return (`Enoent path)
-        | Some x -> return (`Ok (Node.contents_of_sexp (Sexp.of_string x)))
-       with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
-    let merge t msg =
-      ( if prefer_merge then begin
-            DB_View.merge_path (db msg) [] t.v >>= function
-          | `Ok () -> return true
-          | `Conflict msg ->
-            info "Conflict while merging database view: %s. Attempting a rebase." msg;
-            return false
-        end else return false )
-      >>= function
-      | true -> return true
-      | false ->
-        DB_View.rebase_path (db msg) [] t.v >>= function
-        | `Ok () -> return true
-        | `Conflict msg ->
-          info "Conflict while rebasing database view: %s. Asking client to retry" msg;
-          return false
-  end in
-
-  (* Create the root node *)
-  V.create () >>= fun v ->
-
-  fail_on_error (V.write v Protocol.Path.empty Node.({ creator = 0;
-                                                       perms = Protocol.ACL.({ owner = 0; other = NONE; acl = []});
-                                                       value = "" })) >>= fun () ->
-  V.merge v "Adding root node\n\nA xenstore tree always has a root node, owned
-  by domain 0." >>= fun ok ->
-  ( if not ok then fail (Failure "Failed to merge transaction writing the root node") else return () ) >>= fun () ->
   let module UnixServer = Server.Make(Sockets)(V) in
   let module DomainServer = Server.Make(Interdomain)(V) in
   lwt () = if not enable_xen && (not enable_unix) then begin

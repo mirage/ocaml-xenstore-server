@@ -15,22 +15,38 @@ let nothing = ()
 
 exception Not_implemented of string
 
-module Make(V: VIEW) = struct
+module Make(V: PERSISTENCE) = struct
 
   (* Every write or mkdir will recursively create parent nodes if they
      don't already exist. *)
-  let rec mkdir v path creator =
-    V.mem v path >>= function
-    | true ->
-      return (`Ok ())
-    | false ->
+  let rec mkdir v perms path creator =
+    V.read v perms path >>= function
+    | `Ok node -> return (`Ok node)
+    | `Eacces path -> return (`Eacces path)
+    | `Enoent _ ->
       (* The root node has been created in Main, otherwise we'd blow the
          stack here. *)
       let dirname = Path.dirname path in
-      mkdir v dirname creator >>|= fun () ->
-      V.read v dirname >>|= fun node ->
-      V.write v path Node.({ node with creator; value = "" }) >>|= fun () ->
-      return (`Ok ())
+      mkdir v perms dirname creator >>|= fun node ->
+      let node' = Node.({ node with creator; value = "" }) in
+      V.write v perms path node' >>|= fun () ->
+      return (`Ok node')
+
+  (* Write a path and perform the implicit path creation *)
+  let write v perms path creator value =
+    ( V.exists v perms path
+      >>|= function
+      | false ->
+        let dirname = Path.dirname path in
+        mkdir v perms dirname creator
+      | true ->
+        V.read v perms path
+        >>|= fun node ->
+        return (`Ok node)
+    ) >>|= fun node ->
+    V.write v perms path Node.({ node with creator; value })
+    >>|= fun () ->
+    return (`Ok ())
 
   (* Rm is recursive *)
   let rec rm v path =
@@ -69,36 +85,37 @@ module Make(V: VIEW) = struct
       f v
     end
 
+  let introduced_domains_path = Protocol.Path.of_string_list [ "tools"; "xenstored"; "introduced-domains" ]
+
+  let watches = Hashtbl.create 7
+
   (* The 'path operations' are the ones which can be done in transactions.
      The other operations are always done outside any current transaction. *)
   let pathop domid perms path op v = match op with
   | Request.Read ->
-    V.read v path >>|= fun node ->
+    V.read v perms path >>|= fun node ->
     return (`Ok (Response.Read node.Node.value, nothing))
   | Request.Getperms ->
-    V.read v path >>|= fun node ->
+    V.read v perms path >>|= fun node ->
     return (`Ok (Response.Getperms node.Node.perms, nothing))
-  | Request.Setperms perms ->
-    V.read v path >>|= fun node ->
-    V.write v path { node with Node.perms } >>|= fun () ->
+  | Request.Setperms acl ->
+    V.setperms v perms path acl >>|= fun () ->
     return (`Ok (Response.Setperms, nothing))
   | Request.Directory ->
     V.list v path >>|= fun names ->
     return (`Ok (Response.Directory names, nothing))
   | Request.Write value ->
-    let dirname = Path.dirname path in
-    mkdir v dirname domid >>|= fun () ->
-    V.read v dirname >>|= fun node ->
-    V.write v path Node.({ node with creator = domid; value }) >>|= fun () ->
+    write v perms path domid value
+    >>|= fun () ->
     return (`Ok (Response.Write, nothing))
   | Request.Mkdir ->
-    mkdir v path domid >>|= fun () ->
+    mkdir v perms path domid >>|= fun _ ->
     return (`Ok (Response.Mkdir, nothing))
   | Request.Rm ->
     rm v path >>|= fun () ->
     return (`Ok (Response.Rm, nothing))
 
-  let reply_or_fail domid perms hdr req = match req with
+  let reply_or_fail c domid perms hdr send_watch_event req = match req with
   | Request.PathOp (path, op) ->
     let path = Path.of_string path in
     with_transaction domid hdr req (pathop domid perms path op)
@@ -122,10 +139,73 @@ module Make(V: VIEW) = struct
     end else begin
       return (`Ok (Response.Transaction_end, nothing))
     end
+  | Request.Watch (path, token) ->
+    let open Protocol.Name in
+    let name = of_string path in
+    begin match name with
+    | Absolute path ->
+      V.watch path (fun path -> send_watch_event token (Protocol.Name.Absolute path))
+      >>= fun w ->
+      send_watch_event token (Protocol.Name.Absolute path)
+      >>= fun () ->
+      Hashtbl.replace watches (name, token) w;
+      return (`Ok (Response.Watch, nothing))
+    | Relative path ->
+      let domainpath = Protocol.Path.of_string_list [ "local"; "domain"; string_of_int domid ] in
+      let absolute = Protocol.Name.(to_path (resolve name (Absolute domainpath))) in
+      V.watch absolute (fun path -> send_watch_event token (Protocol.Name.(relative (Absolute path) (Absolute domainpath))))
+      >>= fun w ->
+      send_watch_event token (Protocol.Name.Relative path)
+      >>= fun () ->
+      Hashtbl.replace watches (name, token) w;
+      return (`Ok (Response.Watch, nothing))
+    | Predefined (IntroduceDomain | ReleaseDomain) as name ->
+      (* We store connection information in the tree *)
+      V.watch introduced_domains_path (fun _ -> send_watch_event token name)
+      >>= fun w ->
+      send_watch_event token name
+      >>= fun () ->
+      Hashtbl.replace watches (name, token) w;
+      return (`Ok (Response.Watch, nothing))
+    end
+  | Request.Unwatch (path, token) ->
+    let open Protocol.Name in
+    let name = of_string path in
+    if Hashtbl.mem watches (name, token)
+    then Hashtbl.remove watches (name, token);
+    return (`Ok (Response.Unwatch, nothing))
+  | Request.Restrict domid ->
+    if not(Perms.has perms Perms.RESTRICT)
+    then return (`Eacces Protocol.Path.empty)
+    else begin
+      let perms = Connection.perms c in
+      Connection.set_perms c (Perms.restrict perms domid);
+      return (`Ok (Response.Restrict, nothing))
+    end
+  | Request.Set_target(mine, yours) ->
+    if not(Perms.has perms Perms.SET_TARGET)
+    then return (`Eacces Protocol.Path.empty)
+    else begin
+      List.iter (fun c ->
+        let perms = Connection.perms c in
+        Connection.set_perms c (Perms.set_target perms yours)
+      ) (Connection.find_by_domid mine);
+      return (`Ok (Response.Set_target, nothing))
+    end
+  | Request.Introduce(domid', mfn, port) ->
+    with_transaction domid hdr req
+      (fun v ->
+        let path = Protocol.Path.(concat introduced_domains_path (of_string_list [ string_of_int domid' ])) in
+        write v perms Protocol.Path.(concat path (of_string_list [ "mfn" ])) domid (Nativeint.to_string mfn)
+        >>|= fun () ->
+        write v perms Protocol.Path.(concat path (of_string_list [ "port" ])) domid (string_of_int port)
+        >>|= fun () ->
+        return (`Ok (Response.Introduce, nothing))
+      )
   | _ ->
     return (`Not_implemented (Op.to_string hdr.Header.ty))
 
-  let reply domid perms hdr req =
+  let reply c domid perms hdr send_watch_event req =
     debug "<-  rid %ld tid %ld %s"
       hdr.Header.rid hdr.Header.tid
       (Sexp.to_string (Request.sexp_of_t req));
@@ -135,9 +215,10 @@ module Make(V: VIEW) = struct
 
     Lwt.catch
       (fun () ->
-        reply_or_fail domid perms hdr req >>= function
+        reply_or_fail c domid perms hdr send_watch_event req >>= function
         | `Ok x -> return (x, None)
         | `Enoent path -> errorwith ~error_info:(Some (Path.to_string path)) "ENOENT"
+        | `Eacces path -> errorwith ~error_info:(Some (Path.to_string path)) "EACCES"
         | `Not_implemented fn -> errorwith ~error_info:(Some fn) "EINVAL"
         | `Conflict -> errorwith "EAGAIN"
       )

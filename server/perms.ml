@@ -73,8 +73,7 @@ type permission =
 	| RESTRICT
 	| CONFIGURE
 
-let has (t: t) p =
-	if not(is_dom0 t) then raise Permission_denied
+let has (t: t) p = is_dom0 t
 
 (* check if owner of the current connection and of the current node are the same *)
 let check_owner (connection:t) (node:Protocol.ACL.t) =
@@ -104,10 +103,7 @@ let check (connection:t) request (node:Protocol.ACL.t) =
 			info "Permission denied: Domain %d has write only access" domainid;
 			false
 	in
-	if true
-	&& not (is_dom0 connection)
-	&& not (check_owner connection node)
-	&& not (List.exists check_acl (get_owners connection))
-	then raise Permission_denied
-
-
+	false
+	|| (is_dom0 connection)
+	|| (check_owner connection node)
+	|| (List.exists check_acl (get_owners connection))

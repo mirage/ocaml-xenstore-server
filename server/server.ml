@@ -24,14 +24,14 @@ let debug fmt = Logging.debug "server" fmt
 let info fmt  = Logging.info "server" fmt
 let error fmt = Logging.error "server" fmt
 
-module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
+module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
 
   type channel_state = {
     next_read_ofs: T.offset;                  (* the next byte to read *)
     next_write_ofs: T.offset;                 (* the next byte to write *)
   }
 
-  module C = Connection.Make(V)
+  module C = Connection
   module E = Effects.Make(V)
 
   let handle_connection t =
@@ -39,7 +39,7 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
     let domid = T.domain_of t in
 
     V.create () >>= fun v ->
-    C.create v (address, domid) >>= fun c ->
+    C.create (address, domid) >>= fun c ->
     let special_path name = [ "tool"; "xenstored"; name; (match Uri.scheme address with Some x -> x | None -> "unknown"); string_of_int (C.index c) ] in
 
     (* If this is a restart, there will be an existing side_effects entry.
@@ -80,6 +80,13 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
         return ()
 			done in
 *)
+    let send_watch_event token path =
+      let response = Protocol.Response.Watchevent(path, token) in
+      let hdr = Header.({ tid = -1l; rid = -1l; ty = Op.Watchevent; len = 0 }) in
+      T.enqueue t hdr response >>= fun next_write_ofs ->
+      (* XXX: what do I do with next_write_ofs? *)
+      return () in
+
     try_lwt
       let rec loop () =
         (* (Re-)complete any outstanding request. In the event of a crash
@@ -133,7 +140,7 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
 (*
             E.reply v (Some limits) perm c hdr request >>= fun (response, side_effects) ->
 *)
-            E.reply domid perms hdr request >>= fun (response, side_effects) ->
+            E.reply c domid perms hdr send_watch_event request >>= fun (response, side_effects) ->
             let hdr = Protocol.({ hdr with Header.ty = Response.get_ty response}) in
             return (hdr, response, side_effects, read_ofs)
           | read_ofs, `Error msg ->
@@ -169,13 +176,12 @@ module Make(T: S.SERVER)(V: Persistence.VIEW) = struct
       Mount.unmount connection_path >>= fun e1 ->
       *)
       V.create () >>= fun v ->
-			C.destroy v c >>= fun () ->
+			C.destroy c >>= fun () ->
       V.merge v (Printf.sprintf "Closing connection %d to domain %d\n\nException was: %s"
         (C.index c) domid (Printexc.to_string e)) >>= fun ok ->
       if not ok then error "Failed to commit closing connection transaction";
       (*
       PEffects.destroy peffects >>= fun e3 ->
-      Quota.remove dom >>= fun e4 ->
       let origin =
         Printf.sprintf "Closing connection %d domain %d\n\nException was: %s"
           (Connection.index c) dom (Printexc.to_string e) in
