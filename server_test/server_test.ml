@@ -454,6 +454,7 @@ let test_watches_read_perm () =
 		dom1, none, PathOp("/a", Read), Response.Error "EACCES";
 	];
 	assert_watches dom1 []
+*)
 
 let test_transaction_watches () =
 	(* Check that watches only appear on transaction commit
@@ -466,7 +467,7 @@ let test_transaction_watches () =
 		dom0, none, Watch ("/a", "token"), Response.Watch;
 	];
 	assert_watches dom0 [ ("/a", "token") ];
-        Lwt_main.run (Connection.Watch_events.clear (Connection.watch_events dom0));
+	clear_watches dom0;
 	assert_watches dom0 [];
 	(* PathOp( Writes in a transaction don't generate watches immediately *)
         let tid = begin_transaction store dom0 in
@@ -487,6 +488,7 @@ let test_transaction_watches () =
 	];
 	assert_watches dom0 [ ("/a", "token") ]
 
+(*
 let test_introduce_watches () =
 	(* Check that @introduceDomain watches appear on introduce *)
         let dom0 = connect 0 in
@@ -709,9 +711,9 @@ let _ =
 		"test_transactions_really_do_conflict" >:: test_transactions_really_do_conflict;
 		"test_simple_watches" >:: test_simple_watches;
 		"test_relative_watches" >:: test_relative_watches;
-(*
 (*		"test_watches_read_perm" >:: test_watches_read_perm; *)
 		"test_transaction_watches" >:: test_transaction_watches;
+(*
 		"test_introduce_watches" >:: test_introduce_watches;
 *)
                 "test_rm_root" >:: test_rm_root;
