@@ -145,8 +145,6 @@ let begin_transaction store c =
       | Protocol.Response.Transaction_start tid, _ -> return tid
       | _, _ -> failwith "begin_transaction")
     (function
-      | Node.Doesnt_exist x ->
-        failwith (Printf.sprintf "begin_transaction node doesn't exist: %s" (Protocol.Path.to_string x))
       | e -> raise e
     ) in
     Lwt_main.run t
