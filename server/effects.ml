@@ -63,31 +63,64 @@ module Make(V: PERSISTENCE) = struct
       next := Int32.succ !next;
       this
 
-  let with_transaction domid hdr req f =
-    if hdr.Header.tid = 0l then begin
-      let rec retry counter =
-        V.create () >>= fun v ->
-        f v >>|= fun (response, side_effects) ->
-        let origin = Printf.sprintf "Domain %d: %s = %s" domid
-          (Protocol.Request.to_string req) (Protocol.Response.to_string response) in
-        (* No locks are held so this merge might conflict with a parallel
-           transaction. We retry forever assuming this is rare. *)
-        V.merge v origin >>= function
-        | true ->
-          return (`Ok (response, side_effects))
-        | false ->
-          info "rid %ld tid %ld failed to merge after %d attempts"
-            hdr.Header.rid hdr.Header.tid counter;
-          retry (counter + 1) in
-      retry 0
-    end else begin
-      let v = Hashtbl.find transactions hdr.Header.tid in
-      f v
-    end
+  let next_watch_id =
+    let next = ref 0 in
+    fun () ->
+      let this = !next in
+      incr next;
+      this
+
+  let with_transaction ?(origin = "Internal state update") f =
+    let rec retry counter =
+      V.create () >>= fun v ->
+      f v >>|= fun () ->
+      V.merge v origin >>= function
+      | true ->
+        return (`Ok ())
+      | false ->
+        retry (counter + 1) in
+    retry 0
 
   let introduced_domains_path = Protocol.Path.of_string_list [ "tools"; "xenstored"; "introduced-domains" ]
 
+  type watch = {
+    name: Protocol.Name.t;
+    token: string;
+    id: int;
+  }
+
   let watches = Hashtbl.create 7
+
+  let watch_path = Protocol.Path.of_string_list [ "tools"; "xenstored"; "connection"; "watch" ]
+
+  let add_watch domid c perms name token =
+    let id = next_watch_id () in
+    let index = Connection.index c in
+    let w = { name; token; id } in
+    Hashtbl.replace watches (name, token) w;
+    with_transaction ~origin:(Printf.sprintf "adding watch on %s with token %s" (Protocol.Name.to_string name) token)
+      (fun v ->
+        write v perms Protocol.Path.(concat watch_path (of_string_list [ string_of_int domid; string_of_int index; string_of_int id; "name" ])) 0 (Protocol.Name.to_string name)
+        >>|= fun () ->
+        write v perms Protocol.Path.(concat watch_path (of_string_list [ string_of_int domid; string_of_int index; string_of_int id; "token" ])) 0 token
+        >>|= fun () ->
+        return (`Ok ())
+      )
+    >>|= fun () ->
+    return (`Ok ())
+
+  let remove_watch domid c name token =
+    let index = Connection.index c in
+    let w = Hashtbl.find watches (name, token) in
+    Hashtbl.remove watches (name, token);
+    with_transaction ~origin:(Printf.sprintf "removing watch on %s with token %s" (Protocol.Name.to_string name) token)
+      (fun v ->
+        rm v Protocol.Path.(concat watch_path (of_string_list [ string_of_int domid; string_of_int index; string_of_int w.id ]))
+      )
+    >>|= fun () ->
+    return (`Ok ())
+
+
 
   (* The 'path operations' are the ones which can be done in transactions.
      The other operations are always done outside any current transaction. *)
@@ -115,10 +148,33 @@ module Make(V: PERSISTENCE) = struct
     rm v path >>|= fun () ->
     return (`Ok (Response.Rm, nothing))
 
-  let reply_or_fail c domid perms hdr send_watch_event req = match req with
+  let reply_or_fail c domid perms hdr send_watch_event req =
+
+    let maybe_with_transaction f =
+      if hdr.Header.tid = 0l then begin
+        let rec retry counter =
+          V.create () >>= fun v ->
+          f v >>|= fun (response, side_effects) ->
+          let origin = Printf.sprintf "Domain %d: %s = %s" domid
+            (Protocol.Request.to_string req) (Protocol.Response.to_string response) in
+          (* No locks are held so this merge might conflict with a parallel
+             transaction. We retry forever assuming this is rare. *)
+          V.merge v origin >>= function
+          | true ->
+            return (`Ok (response, side_effects))
+          | false ->
+            info "rid %ld tid %ld failed to merge after %d attempts"
+              hdr.Header.rid hdr.Header.tid counter;
+            retry (counter + 1) in
+        retry 0
+      end else begin
+        let v = Hashtbl.find transactions hdr.Header.tid in
+        f v
+      end in
+ match req with
   | Request.PathOp (path, op) ->
     let path = Path.of_string path in
-    with_transaction domid hdr req (pathop domid perms path op)
+    maybe_with_transaction (pathop domid perms path op)
   | Request.Getdomainpath domid ->
     return (`Ok (Response.Getdomainpath (Printf.sprintf "/local/domain/%d" domid), nothing))
   | Request.Transaction_start ->
@@ -144,20 +200,22 @@ module Make(V: PERSISTENCE) = struct
     let name = of_string path in
     begin match name with
     | Absolute path ->
-      V.watch path (fun path -> send_watch_event token (Protocol.Name.Absolute path))
+      V.watch path (fun path -> send_watch_event token name)
       >>= fun w ->
       send_watch_event token (Protocol.Name.Absolute path)
       >>= fun () ->
-      Hashtbl.replace watches (name, token) w;
+      add_watch domid c perms name token
+      >>|= fun () ->
       return (`Ok (Response.Watch, nothing))
     | Relative path ->
       let domainpath = Protocol.Path.of_string_list [ "local"; "domain"; string_of_int domid ] in
       let absolute = Protocol.Name.(to_path (resolve name (Absolute domainpath))) in
       V.watch absolute (fun path -> send_watch_event token (Protocol.Name.(relative (Absolute path) (Absolute domainpath))))
       >>= fun w ->
-      send_watch_event token (Protocol.Name.Relative path)
+      send_watch_event token name
       >>= fun () ->
-      Hashtbl.replace watches (name, token) w;
+      add_watch domid c perms name token
+      >>|= fun () ->
       return (`Ok (Response.Watch, nothing))
     | Predefined (IntroduceDomain | ReleaseDomain) as name ->
       (* We store connection information in the tree *)
@@ -165,14 +223,15 @@ module Make(V: PERSISTENCE) = struct
       >>= fun w ->
       send_watch_event token name
       >>= fun () ->
-      Hashtbl.replace watches (name, token) w;
+      add_watch domid c perms name token
+      >>|= fun () ->
       return (`Ok (Response.Watch, nothing))
     end
   | Request.Unwatch (path, token) ->
     let open Protocol.Name in
     let name = of_string path in
-    if Hashtbl.mem watches (name, token)
-    then Hashtbl.remove watches (name, token);
+    remove_watch domid c name token
+    >>|= fun () ->
     return (`Ok (Response.Unwatch, nothing))
   | Request.Restrict domid ->
     if not(Perms.has perms Perms.RESTRICT)
@@ -193,7 +252,7 @@ module Make(V: PERSISTENCE) = struct
       return (`Ok (Response.Set_target, nothing))
     end
   | Request.Introduce(domid', mfn, port) ->
-    with_transaction domid hdr req
+    maybe_with_transaction
       (fun v ->
         let path = Protocol.Path.(concat introduced_domains_path (of_string_list [ string_of_int domid' ])) in
         write v perms Protocol.Path.(concat path (of_string_list [ "mfn" ])) domid (Nativeint.to_string mfn)
