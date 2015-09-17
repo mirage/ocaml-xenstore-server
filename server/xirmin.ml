@@ -269,7 +269,7 @@ let make ?(prefer_merge=true) config db_m =
           Lwt_list.iter_s
             (fun key ->
               info "Watchevent (updated): %s/%s" (Protocol.Path.to_string path) (String.concat "/" key);
-              callback_fn (Protocol.Path.of_string_list key)
+              callback_fn (Protocol.Path.(concat path (of_string_list key)));
             ) (KeySet.fold (fun elt acc -> elt :: acc) all [])
         | `Removed ((_, a)) ->
           ls_lR a []
@@ -277,7 +277,7 @@ let make ?(prefer_merge=true) config db_m =
           Lwt_list.iter_s
             (fun key ->
               info "Watchevent (removed): %s/%s" (Protocol.Path.to_string path) (String.concat "/" key);
-              callback_fn (Protocol.Path.of_string_list key);
+              callback_fn (Protocol.Path.(concat path (of_string_list key)));
             ) (KeySet.fold (fun elt acc -> elt :: acc) all [])
         | `Added ((_, a)) ->
           ls_lR a []

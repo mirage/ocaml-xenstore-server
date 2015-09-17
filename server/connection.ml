@@ -26,18 +26,27 @@ end
 type t = {
   uri: Uri.t;
   domid: int;
+  index: int;
   mutable perms: Perms.t;
 }
 
 let all = Hashtbl.create 7
 
+let next_index =
+  let next = ref 0 in
+  fun () ->
+    let this = !next in
+    incr next;
+    this
+
 let create (uri, domid) =
+  let index = next_index () in
   let perms = Perms.of_domain domid in
-  let c = { uri; domid; perms } in
+  let c = { index; uri; domid; perms } in
   Hashtbl.replace all uri c;
   return c
 
-let index _ = -1
+let index t = t.index
 
 let perms t = t.perms
 
