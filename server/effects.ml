@@ -51,8 +51,9 @@ module Make(V: PERSISTENCE) = struct
   (* Rm is recursive *)
   let rec rm v path =
     V.list v path >>|= fun names ->
+    iter_s (rm v) (List.map (fun name -> Path.concat path (Path.of_string name)) names) >>|= fun () ->
     V.rm v path >>|= fun () ->
-    iter_s (rm v) (List.map (fun name -> Path.concat path (Path.of_string name)) names)
+    return (`Ok ())
 
   let transactions = Hashtbl.create 16
 
