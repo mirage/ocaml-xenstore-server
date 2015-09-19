@@ -70,7 +70,7 @@ module type SERVER = sig
 
   val enqueue: connection -> Protocol.Header.t -> Protocol.Response.t -> offset t
 
-  val recv: connection -> offset -> (offset * [ `Ok of (Protocol.Header.t * Protocol.Request.t) | `Error of string ]) t
+  val recv: connection -> offset -> (offset * [ `Ok of (Protocol.Header.t * Protocol.Request.t) | `BadRequest of (Protocol.Header.t * string) | `Error of string ]) t
 
   module Introspect : sig
     val ls: connection -> string list -> string list

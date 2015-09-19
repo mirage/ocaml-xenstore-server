@@ -276,7 +276,7 @@ let recv t _ =
     let payload = Cstruct.sub t.read_buffer Protocol.Header.sizeof x.Protocol.Header.len in
     read t payload >>= fun () ->
     begin match Protocol.Request.unmarshal x payload with
-    | `Error y -> return ((), `Error y)
+    | `Error y -> return ((), `BadRequest (x, y))
     | `Ok y -> return ((), `Ok (x, y))
     end
 

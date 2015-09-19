@@ -143,10 +143,14 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
             E.reply c domid perms hdr send_watch_event request >>= fun (response, side_effects) ->
             let hdr = Protocol.({ hdr with Header.ty = Response.get_ty response}) in
             return (hdr, response, side_effects, read_ofs)
-          | read_ofs, `Error msg ->
-					  (* quirk: if this is a NULL-termination error then it should be EINVAL *)
+          | read_ofs, `BadRequest (hdr, msg) ->
+            (* quirk: if this is a NULL-termination error then it should be EINVAL *)
             let response = Protocol.Response.Error "EINVAL" in
-
+            Lwt_mutex.lock write_m >>= fun () ->
+            let hdr = { hdr with Protocol.Header.ty = Op.Error } in
+            return (hdr, response, Effects.nothing, read_ofs )
+          | read_ofs, `Error msg ->
+            let response = Protocol.Response.Error "EINVAL" in
             Lwt_mutex.lock write_m >>= fun () ->
             let hdr = Header.({ tid = -1l; rid = -1l; ty = Op.Error; len = 0 }) in
             return (hdr, response, Effects.nothing, read_ofs )

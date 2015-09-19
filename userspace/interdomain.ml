@@ -397,7 +397,7 @@ let rec recv t read_ofs =
    | `Ok r ->
      return (read_ofs', `Ok (hdr, r))
    | `Error e ->
-     return (read_ofs', `Error e)
+     return (read_ofs', `BadRequest (hdr, e))
 
 let get_read_offset t =
   Reader.next t >>= fun (next_read_ofs, _) ->
