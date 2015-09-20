@@ -13,6 +13,4 @@
  *)
 open Xenstore
 
-module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) : sig
-  val serve_forever: unit -> unit Lwt.t
-end
+module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) : Persistence.SERVER

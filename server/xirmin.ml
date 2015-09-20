@@ -179,24 +179,24 @@ let make ?(prefer_merge=true) config db_m =
       with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
 
     let rm t path =
-      (try_lwt
-        let (>>|=) m f = m >>= function
-        | `Ok x -> f x
-        | `Enoent x -> return (`Enoent x)
-        | `Einval -> return (`Einval) in
-        ( if path = Protocol.Path.empty
-          then return `Einval
-          else
-            (* If the parent doesn't exist we should return `Enoent *)
-            let parent = Protocol.Path.dirname path in
-            DB_View.mem t.v (value_of_filename parent)
-            >>= function
-            | false -> return (`Enoent parent)
-            | true -> return (`Ok ())
-        ) >>|= fun () ->
-        DB_View.remove t.v (dir_of_filename path) >>= fun () ->
-        DB_View.remove t.v (value_of_filename path) >>= fun () ->
-        DB_View.remove t.v (order_of_filename path) >>= fun () ->
+      let (>>|=) m f = m >>= function
+      | `Ok x -> f x
+      | `Enoent x -> return (`Enoent x)
+      | `Einval -> return (`Einval) in
+      ( if path = Protocol.Path.empty
+        then return `Einval
+        else
+          (* If the parent doesn't exist we should return `Enoent *)
+          let parent = Protocol.Path.dirname path in
+          DB_View.mem t.v (value_of_filename parent)
+          >>= function
+          | false -> return (`Enoent parent)
+          | true -> return (`Ok ())
+      ) >>|= fun () ->
+      DB_View.remove t.v (dir_of_filename path) >>= fun () ->
+      DB_View.remove t.v (value_of_filename path) >>= fun () ->
+      DB_View.remove t.v (order_of_filename path) >>= fun () ->
+(*
         let parent = Protocol.Path.dirname path in
         let order_path = order_of_filename parent in
         ( DB_View.read t.v order_path
@@ -208,8 +208,8 @@ let make ?(prefer_merge=true) config db_m =
         let order' = order @ [ Protocol.Path.Element.to_string (Protocol.Path.basename path) ] in
         DB_View.update t.v order_path (Sexp.to_string (sexp_of_order order'))
         >>= fun () ->
-        return (`Ok ())
-      with e -> (error "%s" (Printexc.to_string e)); return (`Ok ()))
+*)
+      return (`Ok ())
     let read t perms path =
       (try_lwt
         DB_View.read t.v (value_of_filename path) >>= function

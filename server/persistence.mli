@@ -46,3 +46,7 @@ module type EFFECTS = sig
   val reply: Connection.t -> int -> Perms.t -> Protocol.Header.t -> (string -> Protocol.Name.t -> unit Lwt.t) -> Protocol.Request.t -> (Protocol.Response.t * unit) Lwt.t
 
 end
+
+module type SERVER = sig
+  val serve_forever: unit -> unit Lwt.t
+end

@@ -5,7 +5,6 @@ open OUnit
 
 let debug_to_stdout = ref false
 
-(*
 let debug fmt = Logging.debug "xenstored" fmt
 let info  fmt = Logging.info  "xenstored" fmt
 let error fmt = Logging.error "xenstored" fmt
@@ -19,6 +18,16 @@ let _ =
   Sockets.xenstored_socket := socket
 
 module Server = Server.Make(Sockets)
+let server =
+  let open Irmin_unix in
+  let module DB =
+    Irmin_mem.Make(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
+  let config = Irmin_mem.config () in
+  Xirmin.make config (module DB)
+  >>= fun store ->
+  let module V = (val store: Persistence.PERSISTENCE) in
+  let module S = Xenstored.Server.Make(Sockets)(V) in
+  return (module S: Persistence.SERVER)
 
 let rec logging_thread logger =
   lwt lines = Logging.get logger in
@@ -33,7 +42,9 @@ let rec logging_thread logger =
 let server_thread =
   let (_: 'a) = logging_thread Logging.logger in
   info "Starting test";
-  Server.serve_forever S.NoPersistence
+  server >>= fun server ->
+  let module S = (val server: Xenstored.Persistence.SERVER) in
+  S.serve_forever ()
 
 let fail_on_error = function
 | `Ok x -> return x
@@ -61,7 +72,7 @@ let test (request, response) () =
   debug "read response \"%s\"" (String.escaped (Cstruct.to_string response'));
   assert_equal ~printer:String.escaped response (Cstruct.to_string response');
   return ()
-*)
+
 let _ =
   let verbose = ref false in
   Arg.parse [
@@ -71,10 +82,10 @@ let _ =
   ] (fun x -> Printf.fprintf stderr "Ignoring argument: %s" x)
     "Test xenstore server code";
 
-  let suite = "xenstore" >::: (* (List.map (fun (x', x, y', y) ->
+  let suite = "xenstore" >::: (List.map (fun (x', x, y', y) ->
     Printf.sprintf "%s -> %s" (String.escaped x') (String.escaped y')
     >:: (fun () -> Lwt_main.run (test (x, y) ()))
-  ) Messages.all) *) [] in
+  ) Messages.all) in
   run_test_tt ~verbose:!verbose suite
 
 
