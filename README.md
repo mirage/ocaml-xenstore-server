@@ -42,3 +42,19 @@ The irminsule database should be persisted to storage which is cleared
 on host restart. Ideally it should be stored to RAM (eg tmpfs) and not
 a physical disk (slow and unnecessarily durable).
 
+Developing with Docker
+======================
+
+This is useful when building on a host (for example a Mac or Windows laptop)
+which doesn't have Xen headers installed.
+
+Build an image containing all the dependencies:
+```
+docker build -t xenstore .
+```
+
+Run a fresh shell inside the image:
+```
+docker run -it -v `pwd`:/src xenstore bash
+```
+
