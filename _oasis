@@ -13,7 +13,7 @@ Library xenstore
   Path:               core
   Findlibname:        xenstore
   Modules:            Protocol, Handle, Client, S
-  BuildDepends:       lwt, lwt.syntax, cstruct (>= 0.6.0), cstruct.syntax, uri, sexplib
+  BuildDepends:       lwt, cstruct (>= 1.9.0), cstruct.ppx, uri, sexplib, ppx_sexp_conv
 
 Library xenstored
   CompiledObject:     best
@@ -21,7 +21,7 @@ Library xenstored
   Path:               server
   Findlibname:        xenstored
   Modules:            Logging, Error, Perms, Persistence, Introduce, Connection, Server, Effects, Xirmin
-  BuildDepends:       lwt, xenstore, irmin, irmin.unix, git, sexplib, sexplib.syntax
+  BuildDepends:       lwt, xenstore, irmin, irmin.unix, git, sexplib, sexplib, ppx_sexp_conv
 
 # For backwards compat
 #Library xenstore_client
