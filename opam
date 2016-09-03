@@ -11,7 +11,7 @@ homepage:     "https://github.com/mirage/ocaml-xenstore-server"
 bug-reports:  "https://github.com/mirage/ocaml-xenstore-server/issues"
 dev-repo:     "https://github.com/mirage/ocaml-xenstore-server.git"
 
-build: [make "TESTS=--disable-tests" "all"]
+build: [make "TESTS=--enable-tests" "all"]
 install: [make "install"]
 remove:  [make "uninstall"]
 
