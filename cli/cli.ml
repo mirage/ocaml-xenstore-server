@@ -62,6 +62,7 @@ let parse_expr s =
       ([], []) (to_list s) in
     ident is @ tokens
   |> List.rev |> Stream.of_list in
+  (*
   let rec parse_atom = parser
     | [< 'Int n >] -> Val (string_of_int n)
     | [< 'Ident n >] -> Val n
@@ -77,6 +78,8 @@ let parse_expr s =
         | [< 'Kwd "="; e2=parse_expr >] -> Eq(e1, e2)
             | [< >] -> e1) stream in
   s |> Stream.of_string |> make_lexer keywords |> flatten |> parse_expr
+  *)
+  failwith "Need to reimplement the expression parser"
 
 (* Return true if [expr] holds. Used in the xenstore 'wait' operation *)
 let rec eval_expression expr xs = match expr with
