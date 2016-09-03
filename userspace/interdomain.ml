@@ -103,20 +103,24 @@ let xenstored_proc_kva  = "/proc/xen/xsd_kva"
 let proc_xen_xenbus = "/proc/xen/xenbus"
 
 let read_port () =
-  try_lwt
+  Lwt.catch
+    (fun () ->
     Lwt_io.with_file ~mode:Lwt_io.input xenstored_proc_port
       (fun ic ->
-        lwt line = Lwt_io.read_line ic in
+        Lwt_io.read_line ic
+        >>= fun line ->
         return (int_of_string line)
       )
-  with Unix.Unix_error(Unix.EACCES, _, _) as e->
-    error "Failed to open %s (EACCES)" xenstored_proc_port;
-    error "Ensure this program is running as root and try again.";
-    fail e
-  | Unix.Unix_error(Unix.ENOENT, _, _) as e ->
-    error "Failed to open %s (ENOENT)" xenstored_proc_port;
-    error "Ensure this system is running xen and try again.";
-    fail e
+    ) (function
+      | Unix.Unix_error(Unix.EACCES, _, _) as e->
+        error "Failed to open %s (EACCES)" xenstored_proc_port;
+        error "Ensure this program is running as root and try again.";
+        fail e
+      | Unix.Unix_error(Unix.ENOENT, _, _) as e ->
+        error "Failed to open %s (ENOENT)" xenstored_proc_port;
+        error "Ensure this system is running xen and try again.";
+        fail e
+      | e -> fail e)
 
 let map_page filename =
   let fd = Unix.openfile filename [ Lwt_unix.O_RDWR ] 0o0 in
@@ -163,14 +167,16 @@ let virq_thread () =
       if release_domain
       then Connection.fire (Protocol.Op.Write, Protocol.Name.(Predefined ReleaseDomain));
       *)
-    lwt after = Unix_activations.after virq_port from in
+    Unix_activations.after virq_port from
+    >>= fun after ->
     loop after in
   loop Unix_activations.program_start
 
 let service_domain d =
   let rec loop from =
     Lwt_condition.broadcast d.c ();
-    lwt after = Unix_activations.after (Eventchn.of_int d.port) from in
+    Unix_activations.after (Eventchn.of_int d.port) from
+    >>= fun after ->
     if d.shutdown
     then return ()
     else loop after in

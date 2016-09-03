@@ -87,7 +87,8 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
       (* XXX: what do I do with next_write_ofs? *)
       return () in
 
-    try_lwt
+    Lwt.catch
+      (fun () ->
       let rec loop () =
         (* (Re-)complete any outstanding request. In the event of a crash
            these steps will be re-executed. Each step must therefore be
@@ -172,7 +173,7 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
               (C.index c) domid in
         loop () in
 			loop ()
-		with e ->
+      ) (fun e ->
       info "Closing connection %d to domain %d: %s"
         (C.index c) domid (Printexc.to_string e);
     (*
@@ -191,7 +192,7 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
           (Connection.index c) dom (Printexc.to_string e) in
       Database.persist ~origin Transaction.(e1 ++ e2 ++ e3 ++ e4) >>= fun () ->
       *)
-      T.destroy t
+      T.destroy t)
 
 	let serve_forever () =
 		T.listen () >>= fun server ->

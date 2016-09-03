@@ -31,14 +31,13 @@ let shutdown_logger () =
 
 let rec logging_thread daemon logger =
   let log_batch () =
-    lwt lines = Logging.get logger in
+    Logging.get logger
+    >>= fun lines ->
     Lwt_list.iter_s
       (fun x ->
-        lwt () =
-          if daemon
-          then Lwt_log.log ~logger:syslog ~level:Lwt_log.Notice x
-          else Lwt_io.write_line Lwt_io.stdout x in
-          return ()
+        if daemon
+        then Lwt_log.log ~logger:syslog ~level:Lwt_log.Notice x
+        else Lwt_io.write_line Lwt_io.stdout x
       ) lines in
   log_batch () >>= fun () ->
   if not(!shutting_down_logger)
@@ -109,52 +108,57 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
 
   let module UnixServer = Server.Make(Sockets)(V) in
   let module DomainServer = Server.Make(Interdomain)(V) in
-  lwt () = if not enable_xen && (not enable_unix) then begin
-    error "You must specify at least one transport (--enable-unix and/or --enable-xen)";
-    fail (Failure "no transports specified")
-  end else return () in
+  ( if not enable_xen && (not enable_unix) then begin
+      error "You must specify at least one transport (--enable-unix and/or --enable-xen)";
+      fail (Failure "no transports specified")
+    end else return () )
+  >>= fun () ->
 
-  lwt () =
-    if enable_unix
+  ( if enable_unix
     then ensure_directory_exists (Filename.dirname path)
-    else return () in
+    else return () )
+  >>= fun () ->
 
-  lwt () =
-    if daemon
+  ( if daemon
     then ensure_directory_exists (Filename.dirname pidfile)
-    else return () in
+    else return () )
+  >>= fun () ->
 
-  lwt () = if daemon then begin
-    try_lwt
+  ( if daemon then begin
+    Lwt.catch
+      (fun () ->
       debug "Writing pidfile %s" pidfile;
       (try Unix.unlink pidfile with _ -> ());
       let pid = Unix.getpid () in
-      lwt _ = Lwt_io.with_file pidfile ~mode:Lwt_io.output (fun chan -> Lwt_io.fprintlf chan "%d" pid) in
+      Lwt_io.with_file pidfile ~mode:Lwt_io.output (fun chan -> Lwt_io.fprintlf chan "%d" pid)
+      >>= fun () ->
       return ()
-    with Unix.Unix_error(Unix.EACCES, _, _) ->
+    ) (function Unix.Unix_error(Unix.EACCES, _, _) ->
       error "Permission denied (EACCES) writing pidfile %s" pidfile;
       error "Try a new --pidfile path or running this program with more privileges";
       fail (Failure "EACCES writing pidfile")
+      | e -> Lwt.fail e)
   end else begin
     debug "We are not daemonising so no need for a pidfile.";
     return ()
-  end in
+  end)
+  >>= fun () ->
   let (a: unit Lwt.t) =
     if enable_unix then begin
       info "Starting server on unix domain socket %s" !Sockets.xenstored_socket;
-      try_lwt
-        UnixServer.serve_forever ()
-      with Unix.Unix_error(Unix.EACCES, _, _) as e ->
-        error "Permission denied (EACCES) binding to %s" !Sockets.xenstored_socket;
-        error "To resolve this problem either run this program with more privileges or change the path.";
-        fail e
-      | Unix.Unix_error(Unix.EADDRINUSE, _, _) as e ->
-        error "The unix domain socket %s is already in use (EADDRINUSE)" !Sockets.xenstored_socket;
-        error "To resolve this program either run this program with more privileges (so that it may delete the current socket) or change the path.";
-        fail e
-      | e ->
-        error "Failed to start the unix domain socket server: %s" (Printexc.to_string e);
-        fail e
+      Lwt.catch UnixServer.serve_forever
+        (function
+          | Unix.Unix_error(Unix.EACCES, _, _) as e ->
+            error "Permission denied (EACCES) binding to %s" !Sockets.xenstored_socket;
+            error "To resolve this problem either run this program with more privileges or change the path.";
+            fail e
+          | Unix.Unix_error(Unix.EADDRINUSE, _, _) as e ->
+            error "The unix domain socket %s is already in use (EADDRINUSE)" !Sockets.xenstored_socket;
+            error "To resolve this program either run this program with more privileges (so that it may delete the current socket) or change the path.";
+            fail e
+          | e ->
+            error "Failed to start the unix domain socket server: %s" (Printexc.to_string e);
+            fail e)
     end else return () in
   let (b: unit Lwt.t) =
     (*
@@ -164,9 +168,11 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
     end else *) return () in
   Introduce.(introduce { Domain.domid = 0; mfn = 0n; remote_port = 0 }) >>= fun () ->
   debug "Introduced domain 0";
-  lwt () = a in
+  a
+  >>= fun () ->
   debug "Unix domain socket server has shutdown.";
-  lwt () = b in
+  b
+  >>= fun () ->
   debug "Xen interdomain server has shutdown.";
   debug "No servers remaining, shutting down.";
   return ()

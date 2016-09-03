@@ -24,20 +24,28 @@ let ( |> ) a b = b a
 let prefix = "/bench"
 
 let getdomainpath domid client =
-	lwt dom_path = immediate client (fun xs -> getdomainpath xs domid) in
+	immediate client (fun xs -> getdomainpath xs domid)
+	>>= fun dom_path ->
 	return (prefix ^ dom_path)
 
 let readdir d client =
-	try_lwt
+	Lwt.catch
+		(fun () ->
 		immediate client (fun xs -> directory xs d)
-	with Protocol.Enoent _ ->
-		return []
+		) (function
+			| Protocol.Enoent _ ->
+				return []
+			| e -> Lwt.fail e)
 
 let read_opt path xs =
-	try_lwt
-		lwt x = read xs path in return (Some x)
-	with Protocol.Enoent _ ->
-		return None
+	Lwt.catch (fun () ->
+		read xs path
+		>>= fun x ->
+		return (Some x)
+	) (function
+		| Protocol.Enoent _ ->
+			return None
+		| e -> Lwt.fail e)
 
 let exists path xs = read_opt path xs >|= (fun x -> x <> None)
 
@@ -101,35 +109,41 @@ let list_kinds dir client =
 (* NB: we only read data from the frontend directory. Therefore this gives
    the "frontend's point of view". *)
 let list_frontends domid client =
-	lwt dom_path = getdomainpath domid client in
+	getdomainpath domid client
+	>>= fun dom_path ->
 	let frontend_dir = dom_path ^ "/device" in
-	lwt kinds = list_kinds frontend_dir client in
+	list_kinds frontend_dir client
+	>>= fun kinds ->
 
-	lwt ll = Lwt_list.map_s
+	Lwt_list.map_s
 		(fun k ->
 			let dir = Printf.sprintf "%s/%s" frontend_dir (string_of_kind k) in
-			lwt devids = readdir dir client >|= List.map parse_int >|= to_list in
+			readdir dir client >|= List.map parse_int >|= to_list
+			>>= fun devids ->
 			Lwt_list.map_s
 				(fun devid ->
 					(* domain [domid] believes it has a frontend for
 					   device [devid] *)
 					let frontend = { domid = domid; kind = k; devid = devid } in
-					try_lwt
+					Lwt.catch (fun () ->
 						immediate client
 							(fun xs ->
-								lwt x = read xs (Printf.sprintf "%s/%d/backend" dir devid) in
+								read xs (Printf.sprintf "%s/%d/backend" dir devid)
+								>>= fun x ->
 								match parse_backend_link x with
 									| Some b -> return (Some { backend = b; frontend = frontend })
 									| None -> return None
 							)
-					with _ -> return None
+					) (fun _ -> return None)
 				) devids >|= to_list
-		) kinds in
+		) kinds
+	>>= fun ll ->
 	return (List.concat ll)
 
 (** Location of the backend in xenstore *)
 let backend_path_of_device (x: device) client =
-	lwt dom_path = getdomainpath x.backend.domid client in
+	getdomainpath x.backend.domid client
+	>>= fun dom_path ->
 	return (Printf.sprintf "%s/backend/%s/%u/%d"
 		dom_path
 		(string_of_kind x.backend.kind)
@@ -137,7 +151,8 @@ let backend_path_of_device (x: device) client =
 
 (** Location of the backend error path *)
 let backend_error_path_of_device (x: device) client =
-	lwt dom_path = getdomainpath x.backend.domid client in
+	getdomainpath x.backend.domid client
+	>>= fun dom_path ->
 	return (Printf.sprintf "%s/error/backend/%s/%d"
 		dom_path
 		(string_of_kind x.backend.kind)
@@ -145,7 +160,8 @@ let backend_error_path_of_device (x: device) client =
 
 (** Location of the frontend in xenstore *)
 let frontend_path_of_device (x: device) client =
-	lwt dom_path = getdomainpath x.frontend.domid client in
+	getdomainpath x.frontend.domid client
+	>>= fun dom_path ->
 	return (Printf.sprintf "%s/device/%s/%d"
 		dom_path
 		(string_of_kind x.frontend.kind)
@@ -153,21 +169,24 @@ let frontend_path_of_device (x: device) client =
 
 (** Location of the frontend error node *)
 let frontend_error_path_of_device (x: device) client =
-	lwt dom_path = getdomainpath x.frontend.domid client in
+	getdomainpath x.frontend.domid client
+	>>= fun dom_path ->
 	return (Printf.sprintf "%s/error/device/%s/%d/error"
 		dom_path
 		(string_of_kind x.frontend.kind)
 		x.frontend.devid)
 
 let hard_shutdown_request (x: device) client =
-	lwt backend_path = backend_path_of_device x client in
-	lwt frontend_path = frontend_path_of_device x client in
+	backend_path_of_device x client
+	>>= fun backend_path ->
+	frontend_path_of_device x client
+	>>= fun frontend_path ->
 	let online_path = backend_path ^ "/online" in
 	immediate client
 		(fun xs ->
-			lwt () = write xs online_path "0" in
-			lwt () = rm xs frontend_path in
-			return ()
+			write xs online_path "0"
+			>>= fun () ->
+			rm xs frontend_path
 		)
 
 (* We store some transient data elsewhere in xenstore to avoid it getting
@@ -191,55 +210,73 @@ let get_private_data_path_of_device (x: device) =
 let rm_device_state (x: device) client =
 	immediate client
 		(fun xs ->
-			lwt fe = frontend_path_of_device x client in
-			lwt be = backend_path_of_device x client in
-			lwt ber = backend_error_path_of_device x client in
-			lwt fer = frontend_error_path_of_device x client in
+			frontend_path_of_device x client
+			>>= fun fe ->
+			backend_path_of_device x client
+			>>= fun be ->
+			backend_error_path_of_device x client
+			>>= fun ber ->
+			frontend_error_path_of_device x client
+			>>= fun fer ->
 			Lwt_list.iter_s (rm xs) [ fe; be; ber; Filename.dirname fer ]
 		)
 
 let hard_shutdown device client =
-	lwt () = hard_shutdown_request device client in
-	lwt () = rm_device_state device client in
-	return ()
+	hard_shutdown_request device client
+	>>= fun () ->
+	rm_device_state device client
 
 let add device client =
 	let backend_list = []
 	and frontend_list = []
 	and private_list = [] in
 
-	lwt frontend_path = frontend_path_of_device device client in
-	lwt backend_path = backend_path_of_device device client in
+	frontend_path_of_device device client
+	>>= fun frontend_path ->
+	backend_path_of_device device client
+	>>= fun backend_path ->
 	let hotplug_path = get_hotplug_path device in
 	let private_data_path = get_private_data_path_of_device device in
-	lwt () = transaction client
+	transaction client
 		(fun xs ->
-			lwt _ = exists (Printf.sprintf "/local/domain/%d/vm" device.backend.domid) xs in
-			lwt _ = exists frontend_path xs in
-			lwt () = try_lwt lwt () = rm xs frontend_path in return () with _ -> return () in
-			lwt () = try_lwt lwt () = rm xs backend_path in return () with _ -> return () in
+			exists (Printf.sprintf "/local/domain/%d/vm" device.backend.domid) xs
+			>>= fun _ ->
+			exists frontend_path xs
+			>>= fun _ ->
+			Lwt.catch (fun () -> rm xs frontend_path) (fun _ -> return ())
+			>>= fun () ->
+			Lwt.catch (fun () -> rm xs backend_path) (fun _ -> return ())
+			>>= fun () ->
 
 			(* CA-16259: don't clear the 'hotplug_path' because this is where we
 			   record our own use of /dev/loop devices. Clearing this causes us to leak
 			   one per PV .iso *)
-			lwt () = mkdir xs frontend_path in
-			lwt () = setperms xs frontend_path (Protocol.ACL.({owner = device.frontend.domid; other = NONE; acl = [ device.backend.domid, READ ]})) in
-			lwt () = mkdir xs backend_path in
-			lwt () = setperms xs backend_path (Protocol.ACL.({owner = device.backend.domid; other = NONE; acl = [ device.frontend.domid, READ ]})) in
-			lwt () = mkdir xs hotplug_path in
-			lwt () = setperms xs hotplug_path (Protocol.ACL.({owner = device.backend.domid; other = NONE; acl = []})) in
-			lwt () = Lwt_list.iter_s (fun (x, y) -> write xs (frontend_path ^ "/" ^ x) y)
-		        (("backend", backend_path) :: frontend_list) in
-			lwt () = Lwt_list.iter_s (fun (x, y) -> write xs (backend_path ^ "/" ^ x) y)
-				(("frontend", frontend_path) :: backend_list) in
-			lwt () = mkdir xs private_data_path in
-			lwt () = setperms xs private_data_path (Protocol.ACL.({owner = device.backend.domid; other = NONE; acl = []})) in
-			lwt () = Lwt_list.iter_s (fun (x, y) -> write xs (private_data_path ^ "/" ^ x) y)
+			mkdir xs frontend_path
+			>>= fun () ->
+			setperms xs frontend_path (Protocol.ACL.({owner = device.frontend.domid; other = NONE; acl = [ device.backend.domid, READ ]}))
+			>>= fun () ->
+			mkdir xs backend_path
+			>>= fun () ->
+			setperms xs backend_path (Protocol.ACL.({owner = device.backend.domid; other = NONE; acl = [ device.frontend.domid, READ ]}))
+			>>= fun () ->
+			mkdir xs hotplug_path
+			>>= fun () ->
+			setperms xs hotplug_path (Protocol.ACL.({owner = device.backend.domid; other = NONE; acl = []}))
+			>>= fun () ->
+			Lwt_list.iter_s (fun (x, y) -> write xs (frontend_path ^ "/" ^ x) y)
+		        (("backend", backend_path) :: frontend_list)
+			>>= fun () ->
+			Lwt_list.iter_s (fun (x, y) -> write xs (backend_path ^ "/" ^ x) y)
+				(("frontend", frontend_path) :: backend_list)
+			>>= fun () ->
+			mkdir xs private_data_path
+			>>= fun () ->
+			setperms xs private_data_path (Protocol.ACL.({owner = device.backend.domid; other = NONE; acl = []}))
+			>>= fun () ->
+			Lwt_list.iter_s (fun (x, y) -> write xs (private_data_path ^ "/" ^ x) y)
 				(("backend-kind", string_of_kind device.backend.kind) ::
-					("backend-id", string_of_int device.backend.domid) :: private_list) in
-			return ()
-		) in
-	return ()
+					("backend-id", string_of_int device.backend.domid) :: private_list)
+		)
 end
 
 module Domain = struct
@@ -247,7 +284,8 @@ module Domain = struct
 let make domid client =
 	(* create /local/domain/<domid> *)
 	(* create 3 VBDs, 1 VIF (workaround transaction problem?) *)
-	lwt dom_path = getdomainpath domid client in
+	getdomainpath domid client
+	>>= fun dom_path ->
 	let uuid = Printf.sprintf "uuid-%d" domid in
 	let name = "name" in
 	let vm_path = prefix ^ "/vm/" ^ uuid in
@@ -263,65 +301,83 @@ let make domid client =
 	] in
 	let roperm = Protocol.ACL.({owner = 0; other = NONE; acl = [ domid, READ ]}) in
 	let rwperm = Protocol.ACL.({owner = domid; other = NONE; acl = []}) in
-	lwt () =
 		transaction client
 			(fun xs ->
 				(* Clear any existing rubbish in xenstored *)
-				lwt () = try_lwt lwt _ = rm xs dom_path in return () with _ -> return () in
-				lwt () = mkdir xs dom_path in
-				lwt () = setperms xs dom_path roperm in
+				Lwt.catch (fun () -> rm xs dom_path) (fun _ -> return ())
+				>>= fun () ->
+				mkdir xs dom_path
+				>>= fun () ->
+				setperms xs dom_path roperm
+				>>= fun () ->
 				(* The /vm path needs to be shared over a localhost migrate *)
-				lwt vm_exists = immediate client (exists vm_path) in
-				lwt () = if not vm_exists then begin
-					lwt () = mkdir xs vm_path in
-					lwt () = setperms xs vm_path roperm in
-					lwt () = write xs (vm_path ^ "/uuid") uuid in
-					lwt () = write xs (vm_path ^ "/name") name in
-					return ()
-				end else return () in
-				lwt () = write xs (Printf.sprintf "%s/domains/%d" vm_path domid) dom_path in
+				immediate client (exists vm_path)
+				>>= fun vm_exists ->
+				( if not vm_exists then begin
+					mkdir xs vm_path
+					>>= fun () ->
+					setperms xs vm_path roperm
+					>>= fun () ->
+					write xs (vm_path ^ "/uuid") uuid
+					>>= fun () ->
+					write xs (vm_path ^ "/name") name
+				end else return () )
+				>>= fun () ->
+				write xs (Printf.sprintf "%s/domains/%d" vm_path domid) dom_path
+				>>= fun () ->
 
-				lwt () = mkdir xs vss_path in
-				lwt () = setperms xs vss_path rwperm in
+				mkdir xs vss_path
+				>>= fun () ->
+				setperms xs vss_path rwperm
+				>>= fun () ->
 
-				lwt () = write xs (dom_path ^ "/vm") vm_path in
-				lwt () = write xs (dom_path ^ "/vss") vss_path in
-				lwt () = write xs (dom_path ^ "/name") name in
+				write xs (dom_path ^ "/vm") vm_path
+				>>= fun () ->
+				write xs (dom_path ^ "/vss") vss_path
+				>>= fun () ->
+				write xs (dom_path ^ "/name") name
+				>>= fun () ->
 
 				(* create cpu and memory directory with read only perms *)
-				lwt () = Lwt_list.iter_s (fun dir ->
+				Lwt_list.iter_s (fun dir ->
 					let ent = Printf.sprintf "%s/%s" dom_path dir in
-					lwt () = mkdir xs ent in
+					mkdir xs ent
+					>>= fun () ->
 					setperms xs ent roperm
-				) [ "cpu"; "memory" ] in
+				) [ "cpu"; "memory" ]
+				>>= fun () ->
 				(* create read/write nodes for the guest to use *)
-				lwt () = Lwt_list.iter_s (fun dir ->
+				Lwt_list.iter_s (fun dir ->
 					let ent = Printf.sprintf "%s/%s" dom_path dir in
-					lwt () = mkdir xs ent in
+					mkdir xs ent
+					>>= fun () ->
 					setperms xs ent rwperm
-				) [ "device"; "error"; "drivers"; "control"; "attr"; "data"; "messages"; "vm-data" ] in
-				return ()
-		) in
-	lwt () = transaction client
+				) [ "device"; "error"; "drivers"; "control"; "attr"; "data"; "messages"; "vm-data" ]
+			)
+	>>= fun () ->
+	transaction client
 		(fun xs ->
 
-			lwt () = Lwt_list.iter_s (fun (x, y) -> write xs (dom_path ^ "/" ^ x) y) xsdata in
+			Lwt_list.iter_s (fun (x, y) -> write xs (dom_path ^ "/" ^ x) y) xsdata
+			>>= fun () ->
 
-			lwt () = Lwt_list.iter_s (fun (x, y) -> write xs (dom_path ^ "/platform/" ^ x) y) platformdata in
-			lwt () = Lwt_list.iter_s (fun (x, y) -> write xs (dom_path ^ "/bios-strings/" ^ x) y) bios_strings in
+			Lwt_list.iter_s (fun (x, y) -> write xs (dom_path ^ "/platform/" ^ x) y) platformdata
+			>>= fun () ->
+			Lwt_list.iter_s (fun (x, y) -> write xs (dom_path ^ "/bios-strings/" ^ x) y) bios_strings
+			>>= fun () ->
 
 			(* If a toolstack sees a domain which it should own in this state then the
 			   domain is not completely setup and should be shutdown. *)
-			lwt () = write xs (dom_path ^ "/action-request") "poweroff" in
+			write xs (dom_path ^ "/action-request") "poweroff"
+			>>= fun () ->
 
-			lwt () = write xs (dom_path ^ "/control/platform-feature-multiprocessor-suspend") "1" in
+			write xs (dom_path ^ "/control/platform-feature-multiprocessor-suspend") "1"
+			>>= fun () ->
 
 			(* CA-30811: let the linux guest agent easily determine if this is a fresh domain even if
 			   the domid hasn't changed (consider cross-host migrate) *)
-			lwt () = write xs (dom_path ^ "/unique-domain-id") uuid in
-			return ()
-		) in
-	return ()
+			write xs (dom_path ^ "/unique-domain-id") uuid
+		)
 
 let control_shutdown domid client =
 	getdomainpath domid client >|= (fun x -> x ^ "/control/shutdown")
@@ -333,60 +389,75 @@ let get_uuid domid = Printf.sprintf "uuid-%d" domid
 (** Request a shutdown, return without waiting for acknowledgement *)
 let shutdown domid req client =
 	let reason = string_of_shutdown_reason req in
-	lwt path = control_shutdown domid client in
-	lwt dom_path = getdomainpath domid client in
+	control_shutdown domid client
+	>>= fun path ->
+	getdomainpath domid client
+	>>= fun dom_path ->
 	transaction client
 		(fun xs ->
 			(* Fail if the directory has been deleted *)
-			lwt domain_exists = immediate client (exists dom_path) in
+			immediate client (exists dom_path)
+			>>= fun domain_exists ->
 			if domain_exists then begin
-				lwt () = write xs path reason in
+				write xs path reason
+				>>= fun () ->
 				return true
 			end else return false
 		)
 
 let destroy domid client =
-	lwt dom_path = getdomainpath domid client in
+	getdomainpath domid client
+	>>= fun dom_path ->
 	(* These are the devices with a frontend in [domid] and a well-formed backend
 	   in some other domain *)
-	lwt all_devices = Device.list_frontends domid client in
+	Device.list_frontends domid client
+	>>= fun all_devices ->
 
 	(* Forcibly shutdown every backend *)
-	lwt () = Lwt_list.iter_s
+	Lwt_list.iter_s
 		(fun device ->
 			Device.hard_shutdown device client
-		) all_devices in
+		) all_devices
+	>>= fun () ->
 	(* Remove our reference to the /vm/<uuid> directory *)
-	lwt vm_path = immediate client (read_opt (dom_path ^ "/vm")) in
-	lwt vss_path = immediate client (read_opt (dom_path ^ "/vss")) in
-	lwt () = begin match vm_path with
+	immediate client (read_opt (dom_path ^ "/vm"))
+	>>= fun vm_path ->
+	immediate client (read_opt (dom_path ^ "/vss"))
+	>>= fun vss_path ->
+	( match vm_path with
 		| Some vm_path ->
 			immediate client
 				(fun xs ->
-					lwt () = rm xs (vm_path ^ "/domains/" ^ (string_of_int domid)) in
-					lwt domains = readdir (vm_path ^ "/domains") client in
+					rm xs (vm_path ^ "/domains/" ^ (string_of_int domid))
+					>>= fun () ->
+					readdir (vm_path ^ "/domains") client
+					>>= fun domains ->
 					if List.filter (fun x -> x <> "") domains = [] then begin
-						lwt () = rm xs vm_path in
+						rm xs vm_path
+						>>= fun () ->
 						begin match vss_path with
 							| Some vss_path -> rm xs vss_path
 							| None -> return ()
 						end
 					end else return ()
 				)
-		| None -> return ()
-	end in
-	lwt () = immediate client (fun xs -> rm xs dom_path) in
-	lwt backend_path = getdomainpath 0 client >|= (fun x -> x ^ "/backend") in
-	lwt all_backend_types = readdir backend_path client in
-	lwt () = Lwt_list.iter_s
+		| None -> return () )
+	>>= fun () ->
+	immediate client (fun xs -> rm xs dom_path)
+	>>= fun () ->
+	getdomainpath 0 client >|= (fun x -> x ^ "/backend")
+	>>= fun backend_path ->
+	readdir backend_path client
+	>>= fun all_backend_types ->
+	Lwt_list.iter_s
 		(fun ty ->
 			immediate client (fun xs -> rm xs (Printf.sprintf "%s/%s/%d" backend_path ty domid))
-		) all_backend_types in
-	return ()
+		) all_backend_types
 end
 
 let vm_shutdown domid client =
-	lwt _ = Domain.shutdown domid () client in
+	Domain.shutdown domid () client
+	>>= fun _ ->
 	Domain.destroy domid client
 
 let vm_start domid client =
@@ -394,11 +465,13 @@ let vm_start domid client =
 		Device.frontend = { Device.domid = domid; kind = Device.Vbd; devid };
 		backend = { Device.domid = 0; kind = Device.Vbd; devid }
 	} in
-	lwt () = Domain.make domid client in
+	Domain.make domid client
+	>>= fun () ->
 	Lwt_list.iter_s (fun d -> Device.add d client) [ vbd 0; vbd 1; vbd 2 ]
 
 let vm_cycle domid client =
-	lwt () = vm_start domid client in
+	vm_start domid client
+	>>= fun () ->
 	vm_shutdown domid client
 
 let initial_setup client =
@@ -437,26 +510,36 @@ let parallel n client =
 		) (between 1 (n + 1))
 
 let query m n client =
-	lwt () = Lwt_list.iter_s
+	Lwt_list.iter_s
 	(fun domid ->
 		vm_start domid client
-	) (between 1 (n + 1)) in
-	lwt () = for_lwt i = 0 to m do
+	) (between 1 (n + 1))
+	>>= fun () ->
+	let rec loop i =
+		if i > m then Lwt.return_unit else begin
 		Lwt_list.iter_p
 		(fun domid ->
-			immediate client (fun xs -> lwt _ = read xs (Printf.sprintf "%s/local/domain/%d/name" prefix domid) in return ())
+			immediate client (fun xs ->
+				read xs (Printf.sprintf "%s/local/domain/%d/name" prefix domid)
+				>>= fun _ ->
+				return ()
+			)
 		) (between 1 (n + 1))
-	done in
-	lwt () = Lwt_list.iter_s
+		>>= fun () ->
+		loop (i + 1)
+		end in
+	loop 0
+	>>= fun () ->
+	Lwt_list.iter_s
 	(fun domid ->
 		vm_shutdown domid client
-	) (between 1 (n + 1)) in
-	return ()
+	) (between 1 (n + 1))
 
 
 let time f =
 	let start = Unix.gettimeofday () in
-	lwt () = f () in
+	f ()
+	>>= fun () ->
 	return (Unix.gettimeofday () -. start)
 
 let usage () =
@@ -499,13 +582,13 @@ let main () =
 		| None -> 300
 		| Some n -> int_of_string n in
 
-	lwt client = make () in
+	make ()
+	>>= fun client ->
   initial_setup client >>= fun () ->
 
-	lwt t = time (fun () -> parallel n client) in
-    lwt () = Lwt_io.write Lwt_io.stdout (Printf.sprintf "%d parallel starts and shutdowns: %.02f\n" n t) in
-
-	return ()
+	time (fun () -> parallel n client)
+	>>= fun t ->
+        Lwt_io.write Lwt_io.stdout (Printf.sprintf "%d parallel starts and shutdowns: %.02f\n" n t)
  end
 
 let _ =

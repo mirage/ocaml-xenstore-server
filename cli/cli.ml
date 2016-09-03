@@ -81,28 +81,41 @@ let parse_expr s =
 (* Return true if [expr] holds. Used in the xenstore 'wait' operation *)
 let rec eval_expression expr xs = match expr with
   | Val path ->
-    begin try_lwt
-      lwt k = read xs path in
-      return true
-    with Enoent _ ->
-      return false
-    end
+    Lwt.catch
+      (fun () ->
+        read xs path
+        >>= fun k ->
+        return true
+      ) (function
+        | Enoent _ ->
+          return false
+        | e -> Lwt.fail e)
   | Not a ->
-    lwt a' = eval_expression a xs in
+    eval_expression a xs
+    >>= fun a' ->
     return (not(a'))
   | And (a, b) ->
-    lwt a' = eval_expression a xs and b' = eval_expression b xs in
+    eval_expression a xs
+    >>= fun a' ->
+    eval_expression b xs
+    >>= fun b' ->
     return (a' && b')
   | Or (a, b) ->
-    lwt a' = eval_expression a xs and b' = eval_expression b xs in
+    eval_expression a xs
+    >>= fun a' ->
+    eval_expression b xs
+    >>= fun b' ->
     return (a' || b')
   | Eq (Val path, Val v) ->
-    begin try_lwt
-      lwt v' = read xs path in
-      return (v = v')
-    with Enoent _ ->
-      return false
-    end
+    Lwt.catch
+      (fun () ->
+        read xs path
+        >>= fun v' ->
+        return (v = v')
+      ) (function
+        | Enoent _ ->
+          return false
+        | e -> Lwt.fail e)
   | _ -> fail Invalid_expression
 
 let usage () =
@@ -170,60 +183,83 @@ let main () =
 		| None -> return () in
 	match args with
 	| [ "read"; key ] ->
-		lwt client = make () in
-			immediate client
-				(fun xs ->
-					lwt () = do_restrict xs in
-					lwt v = read xs key in
-					Lwt_io.write Lwt_io.stdout v
-				) >> return ()
+		make ()
+		>>= fun client ->
+		immediate client
+			(fun xs ->
+				do_restrict xs
+				>>= fun () ->
+				read xs key
+				>>= fun v ->
+				Lwt_io.write Lwt_io.stdout v
+			)
     | [ "directory"; key ] ->
-		lwt client = make () in
+		make ()
+		>>= fun client ->
 		immediate client
 			(fun xs ->
-				lwt () = do_restrict xs in
-				lwt ls = directory xs key in
+				do_restrict xs
+				>>= fun () ->
+				directory xs key
+				>>= fun ls ->
 				Lwt_list.iter_s (fun x -> Lwt_io.write Lwt_io.stdout (x ^ "\n")) ls
-		) >> return ()
+		)
     | "write" :: expr ->
-		begin lwt items = try_lwt
-			let expr = String.concat " " expr |> parse_expr in
-			if !verbose then Printf.printf "Parsed: %s\n%!" (pretty_print () expr);
-			expr |> to_conjunction |> return
-		with Invalid_expression as e ->
-			Lwt_io.write Lwt_io.stderr "Invalid expression; expected <key=val> [and key=val]*\n" >> raise_lwt e in
-			lwt client = make () in
-			immediate client
-			(fun xs ->
-				lwt () = do_restrict xs in
-				Lwt_list.iter_s (fun (k, v) -> write xs k v) items
-			) >> return ()
-		end
-	| "debug" :: cmd_args ->
-		lwt client = make () in
+		Lwt.catch
+			(fun () ->
+				let expr = String.concat " " expr |> parse_expr in
+				if !verbose then Printf.printf "Parsed: %s\n%!" (pretty_print () expr);
+				expr |> to_conjunction |> return
+			) (function
+				| Invalid_expression as e ->
+					Lwt_io.write Lwt_io.stderr "Invalid expression; expected <key=val> [and key=val]*\n"
+					>>= fun () ->
+					Lwt.fail e
+				| e -> fail e)
+		>>= fun items ->
+		make ()
+		>>= fun client ->
 		immediate client
 			(fun xs ->
-				lwt () = do_restrict xs in
-				lwt results = debug xs cmd_args in
+				do_restrict xs
+				>>= fun () ->
+				Lwt_list.iter_s (fun (k, v) -> write xs k v) items
+			)
+	| "debug" :: cmd_args ->
+		make ()
+		>>= fun client ->
+		immediate client
+			(fun xs ->
+				do_restrict xs
+				>>= fun () ->
+				debug xs cmd_args
+				>>= fun results ->
 				Lwt_list.iter_s (fun x -> Lwt_io.write Lwt_io.stdout (x ^ "\n")) results
-			) >> return ()
+			)
     | "wait" :: expr ->
-		begin try_lwt
+		Lwt.catch
+			(fun () ->
 			let expr = String.concat " " expr |> parse_expr in
 			if !verbose then Printf.printf "Parsed: %s\n%!" (pretty_print () expr);
-			lwt client = make () in
+			make ()
+			>>= fun client ->
 			let result =
 				wait client
 					(fun xs ->
-						lwt () = do_restrict xs in
-						lwt result = eval_expression expr xs in
+						do_restrict xs
+						>>= fun () ->
+						eval_expression expr xs
+						>>= fun result ->
 						if not result then fail Eagain else return ()
 					) in
 			(* Lwt_timeout.create 5 (fun () -> cancel result) |> Lwt_timeout.start; *)
 			result
- 		with Invalid_expression as e ->
-			Lwt_io.write Lwt_io.stderr "Invalid expression\n" >> raise_lwt e
- 		end
+ 			) (function
+				| Invalid_expression as e ->
+					Lwt_io.write Lwt_io.stderr "Invalid expression\n"
+					>>= fun () ->
+					Lwt.fail e
+				| e -> Lwt.fail e)
     | _ ->
 		usage ();
 		return ()
