@@ -27,7 +27,8 @@ module type DB_S = Irmin.S
 
 let make ?(prefer_merge=true) config db_m =
   let module DB = (val db_m: DB_S) in
-  DB.create config Irmin_unix.task >>= fun db ->
+  DB.Repo.create config >>= fun repo ->
+  DB.master Irmin_unix.task repo >>= fun db ->
   (* view is no longer embedded in S_MAKER *)
   let module DB_View = Irmin.View(DB) in
   let module V = struct

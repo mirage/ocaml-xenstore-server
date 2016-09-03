@@ -27,7 +27,7 @@ let empty_store () =
   let t =
     let open Irmin_unix in
     let module DB =
-      Irmin_mem.Make(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
+      Irmin_mem.Make(Irmin.Contents.String)(Irmin.Ref.String)(Irmin.Hash.SHA1) in
     let config = Irmin_mem.config () in
     Xirmin.make config (module DB)
     >>= fun store ->

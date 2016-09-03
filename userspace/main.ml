@@ -92,12 +92,12 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
   | None ->
     info "No database provided: will use an in-memory database";
     let module DB =
-      Irmin_mem.Make(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
+      Irmin_mem.Make(Irmin.Contents.String)(Irmin.Ref.String)(Irmin.Hash.SHA1) in
     let config = Irmin_mem.config () in
     return (config, (module DB: Xirmin.DB_S))
   | Some x ->
     let module DB =
-      Irmin_git.FS(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
+      Irmin_git.FS(Irmin.Contents.String)(Irmin.Ref.String)(Irmin.Hash.SHA1) in
     let config = Irmin_git.config ~root:x ~bare:true () in
     return (config, (module DB: Xirmin.DB_S))
   ) >>= fun (config, db_m) ->
