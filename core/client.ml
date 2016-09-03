@@ -43,37 +43,37 @@ module Watcher = struct
   let put (x: t) path =
     Lwt_mutex.with_lock x.m
       (fun () ->
-	x.paths <- StringSet.add path x.paths;
-	Lwt_condition.signal x.c ();
-	return ();
+         x.paths <- StringSet.add path x.paths;
+         Lwt_condition.signal x.c ();
+         return ();
       )
 
   (** Return a set of modified paths, or an empty set if we're cancelling *)
   let get (x: t) =
     Lwt_mutex.with_lock x.m
       (fun () ->
-        let rec loop () =
-          if x.paths = StringSet.empty && not x.cancelling then begin
-            Lwt_condition.wait ~mutex:x.m x.c
-            >>= fun () ->
-            loop ()
-          end else Lwt.return_unit in
-        loop ()
-        >>= fun () ->
-        let results = x.paths in
-        x.paths <- StringSet.empty;
-	return results
+         let rec loop () =
+           if x.paths = StringSet.empty && not x.cancelling then begin
+             Lwt_condition.wait ~mutex:x.m x.c
+             >>= fun () ->
+             loop ()
+           end else Lwt.return_unit in
+         loop ()
+         >>= fun () ->
+         let results = x.paths in
+         x.paths <- StringSet.empty;
+         return results
       )
 
   (** Called to shutdown the watcher and trigger an orderly cleanup *)
   let cancel (x: t) =
     let (_: unit Lwt.t) =
       Lwt_mutex.with_lock x.m
-	(fun () ->
-	  x.cancelling <- true;
-	  Lwt_condition.signal x.c ();
-	  return ()
-	) in
+        (fun () ->
+           x.cancelling <- true;
+           Lwt_condition.signal x.c ();
+           return ()
+        ) in
     ()
 end
 
@@ -82,8 +82,8 @@ exception Unexpected_rid of int32
 exception Dispatcher_failed
 
 let fail_on_error = function
-| `Ok x -> return x
-| `Error x -> fail (Failure x)
+  | `Ok x -> return x
+  | `Error x -> fail (Failure x)
 
 module Make = functor(IO: S.CONNECTION) -> struct
 
@@ -119,9 +119,9 @@ module Make = functor(IO: S.CONNECTION) -> struct
     t.dispatcher_shutting_down <- true; (* no more hashtable entries after this *)
     (* all blocking threads are failed with our exception *)
     Lwt_mutex.with_lock t.suspended_m (fun () ->
-      Printf.fprintf stderr "Propagating exception to %d threads\n%!" (Hashtbl.length t.rid_to_wakeup);
-      Hashtbl.iter (fun _ u -> Lwt.wakeup_later_exn u e) t.rid_to_wakeup;
-      return ())
+        Printf.fprintf stderr "Propagating exception to %d threads\n%!" (Hashtbl.length t.rid_to_wakeup);
+        Hashtbl.iter (fun _ u -> Lwt.wakeup_later_exn u e) t.rid_to_wakeup;
+        return ())
     >>= fun () ->
     Lwt.fail e
 
@@ -135,26 +135,26 @@ module Make = functor(IO: S.CONNECTION) -> struct
     fail_on_error (Response.unmarshal hdr payload) >>= fun r ->
     match r with
     | Response.Watchevent(path, token) ->
-        let token = Token.unmarshal token in
-        (* We may get old watches: silently drop these *)
-        if Hashtbl.mem t.watchevents token then begin
-          Watcher.put (Hashtbl.find t.watchevents token) (Name.to_string path)
-          >>= fun () ->
-          dispatcher t
-        end else dispatcher t
+      let token = Token.unmarshal token in
+      (* We may get old watches: silently drop these *)
+      if Hashtbl.mem t.watchevents token then begin
+        Watcher.put (Hashtbl.find t.watchevents token) (Name.to_string path)
+        >>= fun () ->
+        dispatcher t
+      end else dispatcher t
     | r ->
-        let rid = hdr.Header.rid in
-        Lwt_mutex.with_lock t.suspended_m (fun () ->
+      let rid = hdr.Header.rid in
+      Lwt_mutex.with_lock t.suspended_m (fun () ->
           if Hashtbl.mem t.rid_to_wakeup rid
           then return (Some (Hashtbl.find t.rid_to_wakeup rid))
           else return None)
-        >>= function
-          | None -> handle_exn t (Unexpected_rid rid)
-          | Some thread ->
-            begin
-              Lwt.wakeup_later thread r;
-              dispatcher t
-            end
+      >>= function
+      | None -> handle_exn t (Unexpected_rid rid)
+      | Some thread ->
+        begin
+          Lwt.wakeup_later thread r;
+          dispatcher t
+        end
 
 
   let make_unsafe () =
@@ -189,15 +189,15 @@ module Make = functor(IO: S.CONNECTION) -> struct
   let suspend t =
     Lwt_mutex.with_lock t.suspended_m
       (fun () ->
-        t.suspended <- true;
-        let rec loop () =
-          if Hashtbl.length t.rid_to_wakeup > 0 then begin
-            Lwt_condition.wait ~mutex:t.suspended_m t.suspended_c
-            >>= fun () ->
-            loop ()
-          end else Lwt.return_unit in
-        loop ()
-    )
+         t.suspended <- true;
+         let rec loop () =
+           if Hashtbl.length t.rid_to_wakeup > 0 then begin
+             Lwt_condition.wait ~mutex:t.suspended_m t.suspended_c
+             >>= fun () ->
+             loop ()
+           end else Lwt.return_unit in
+         loop ()
+      )
     >>= fun () ->
     Hashtbl.iter (fun _ watcher -> Watcher.cancel watcher) t.watchevents;
     Lwt.cancel t.dispatcher_thread;
@@ -205,10 +205,10 @@ module Make = functor(IO: S.CONNECTION) -> struct
 
   let resume_unsafe t =
     Lwt_mutex.with_lock t.suspended_m (fun () ->
-      t.suspended <- false;
-      t.dispatcher_shutting_down <- false;
-      Lwt_condition.broadcast t.suspended_c ();
-      return ())
+        t.suspended <- false;
+        t.dispatcher_shutting_down <- false;
+        Lwt_condition.broadcast t.suspended_c ();
+        return ())
     >>= fun () ->
     t.dispatcher_thread <- dispatcher t;
     return ()
@@ -223,11 +223,11 @@ module Make = functor(IO: S.CONNECTION) -> struct
   type handle = client Handle.t
 
   let make_rid =
-	  let counter = ref 0l in
-	  fun () ->
-		  let result = !counter in
-		  counter := Int32.succ !counter;
-		  result
+    let counter = ref 0l in
+    fun () ->
+      let result = !counter in
+      counter := Int32.succ !counter;
+      result
 
   let rpc h payload f =
     let open Handle in
@@ -240,80 +240,80 @@ module Make = functor(IO: S.CONNECTION) -> struct
     then Lwt.fail Dispatcher_failed
     else begin
       Lwt_mutex.with_lock c.suspended_m (fun () ->
-        let rec loop () =
-          if c.suspended then begin
-            Lwt_condition.wait ~mutex:c.suspended_m c.suspended_c
-            >>= fun () ->
-            loop ()
-          end else Lwt.return_unit in
-        loop ()
-        >>= fun () ->
-        Hashtbl.add c.rid_to_wakeup rid u;
-        let next = Request.marshal payload c.send_payload in
-        let len = next.Cstruct.off in
-        let payload = Cstruct.sub c.send_payload 0 len in
-        let hdr = { Header.rid; tid; ty; len } in
-        ignore(Header.marshal hdr c.send_header);
-        IO.write c.transport c.send_header >>= fun () ->
-        IO.write c.transport payload >>= fun () ->
-        return ())
+          let rec loop () =
+            if c.suspended then begin
+              Lwt_condition.wait ~mutex:c.suspended_m c.suspended_c
+              >>= fun () ->
+              loop ()
+            end else Lwt.return_unit in
+          loop ()
+          >>= fun () ->
+          Hashtbl.add c.rid_to_wakeup rid u;
+          let next = Request.marshal payload c.send_payload in
+          let len = next.Cstruct.off in
+          let payload = Cstruct.sub c.send_payload 0 len in
+          let hdr = { Header.rid; tid; ty; len } in
+          ignore(Header.marshal hdr c.send_header);
+          IO.write c.transport c.send_header >>= fun () ->
+          IO.write c.transport payload >>= fun () ->
+          return ())
       >>= fun () ->
       t >>= fun res ->
       Lwt_mutex.with_lock c.suspended_m
         (fun () ->
-          Hashtbl.remove c.rid_to_wakeup rid;
-          Lwt_condition.broadcast c.suspended_c ();
-          return ())
+           Hashtbl.remove c.rid_to_wakeup rid;
+           Lwt_condition.broadcast c.suspended_c ();
+           return ())
       >>= fun () ->
       f res
- end
+    end
 
   let error hint = function
-  | Response.Error "ENOENT" -> raise (Enoent hint)
-  | Response.Error "EAGAIN" -> raise Eagain
-  | Response.Error "EINVAL" -> raise Invalid
-  | Response.Error x        -> raise (Error x)
-  | x              -> raise (Error (Printf.sprintf "%s: unexpected response: %s" hint (Sexplib.Sexp.to_string_hum (Response.sexp_of_t x))))
+    | Response.Error "ENOENT" -> raise (Enoent hint)
+    | Response.Error "EAGAIN" -> raise Eagain
+    | Response.Error "EINVAL" -> raise Invalid
+    | Response.Error x        -> raise (Error x)
+    | x              -> raise (Error (Printf.sprintf "%s: unexpected response: %s" hint (Sexplib.Sexp.to_string_hum (Response.sexp_of_t x))))
 
   let directory h path = rpc (Handle.accessed_path h path) Request.(PathOp(path, Directory))
-    (function Response.Directory ls -> return ls
-    | x -> error "directory" x)
+      (function Response.Directory ls -> return ls
+              | x -> error "directory" x)
   let read h path = rpc (Handle.accessed_path h path) Request.(PathOp(path, Read))
-    (function Response.Read x -> return x
-    | x -> error "read" x)
+      (function Response.Read x -> return x
+              | x -> error "read" x)
   let write h path data = rpc (Handle.accessed_path h path) Request.(PathOp(path, Write data))
-    (function Response.Write -> return ()
-    | x -> error "write" x)
+      (function Response.Write -> return ()
+              | x -> error "write" x)
   let rm h path = rpc (Handle.accessed_path h path) Request.(PathOp(path, Rm))
-    (function Response.Rm -> return ()
-    | x -> error "rm" x)
+      (function Response.Rm -> return ()
+              | x -> error "rm" x)
   let mkdir h path = rpc (Handle.accessed_path h path) Request.(PathOp(path, Mkdir))
-    (function Response.Mkdir -> return ()
-    | x -> error "mkdir" x)
+      (function Response.Mkdir -> return ()
+              | x -> error "mkdir" x)
   let setperms h path acl = rpc (Handle.accessed_path h path) Request.(PathOp(path, Setperms acl))
-    (function Response.Setperms -> return ()
-    | x -> error "setperms" x)
+      (function Response.Setperms -> return ()
+              | x -> error "setperms" x)
   let debug h cmd_args = rpc h (Request.Debug cmd_args)
-    (function Response.Debug debug -> return debug
-    | x -> error "debug" x)
+      (function Response.Debug debug -> return debug
+              | x -> error "debug" x)
   let restrict h domid = rpc h (Request.Restrict domid)
-    (function Response.Restrict -> return ()
-    | x -> error "restrict" x)
+      (function Response.Restrict -> return ()
+              | x -> error "restrict" x)
   let getdomainpath h domid = rpc h (Request.Getdomainpath domid)
-    (function Response.Getdomainpath x -> return x
-    | x -> error "getdomainpath" x)
+      (function Response.Getdomainpath x -> return x
+              | x -> error "getdomainpath" x)
   let watch h path token = rpc (Handle.watch h path) (Request.Watch(path, Token.marshal token))
-    (function Response.Watch -> return ()
-    | x -> error "watch" x)
+      (function Response.Watch -> return ()
+              | x -> error "watch" x)
   let unwatch h path token = rpc (Handle.watch h path) (Request.Unwatch(path, Token.marshal token))
-    (function Response.Unwatch -> return ()
-    | x -> error "unwatch" x)
+      (function Response.Unwatch -> return ()
+              | x -> error "unwatch" x)
   let introduce h domid store_mfn store_port = rpc h (Request.Introduce(domid, store_mfn, store_port))
-    (function Response.Introduce -> return ()
-    | x -> error "introduce" x)
+      (function Response.Introduce -> return ()
+              | x -> error "introduce" x)
   let set_target h stubdom_domid domid = rpc h (Request.Set_target(stubdom_domid, domid))
-    (function Response.Set_target -> return ()
-    | x -> error "set_target" x)
+      (function Response.Set_target -> return ()
+              | x -> error "set_target" x)
   let immediate client f = f (Handle.no_transaction client)
 
   let counter = ref 0l
@@ -331,8 +331,8 @@ module Make = functor(IO: S.CONNECTION) -> struct
     let result, wakener = Lwt.task () in
     on_cancel result
       (fun () ->
-        (* Trigger an orderly cleanup in the background: *)
-	Watcher.cancel watcher
+         (* Trigger an orderly cleanup in the background: *)
+         Watcher.cancel watcher
       );
     let h = Handle.watching client in
     (* Adjust the paths we're watching (if necessary) and block (if possible) *)
@@ -360,14 +360,14 @@ module Make = functor(IO: S.CONNECTION) -> struct
     let rec loop () =
       Lwt.catch
         (fun () ->
-          f h
-          >>= fun result ->
-          wakeup wakener result;
-          return true
+           f h
+           >>= fun result ->
+           wakeup wakener result;
+           return true
         ) (function
-          | Eagain -> return false
-          | e -> Lwt.fail e
-        )
+            | Eagain -> return false
+            | e -> Lwt.fail e
+          )
       >>= function
       | true -> return ()
       | false -> adjust_paths () >>= fun () -> loop ()
@@ -375,28 +375,28 @@ module Make = functor(IO: S.CONNECTION) -> struct
     let (_: unit Lwt.t) =
       Lwt.finalize loop
         (fun () ->
-          let current_paths = Handle.get_watched_paths h in
-          Lwt_list.iter_s (fun p -> unwatch h p token) (elements current_paths)
-          >>= fun () ->
-          Hashtbl.remove client.watchevents token;
-          return ()
+           let current_paths = Handle.get_watched_paths h in
+           Lwt_list.iter_s (fun p -> unwatch h p token) (elements current_paths)
+           >>= fun () ->
+           Hashtbl.remove client.watchevents token;
+           return ()
         ) in
     result
 
   let rec transaction client f =
     rpc (Handle.no_transaction client) Request.Transaction_start
       (function Response.Transaction_start tid -> return tid
-       | x -> error "transaction_start" x)
+              | x -> error "transaction_start" x)
     >>= fun tid ->
     let h = Handle.transaction client tid in
     f h
     >>= fun result ->
     Lwt.catch
       (fun () ->
-        rpc h (Request.Transaction_end true)
-          (function Response.Transaction_end -> return result
-           | x -> error "transaction_end" x)
+         rpc h (Request.Transaction_end true)
+           (function Response.Transaction_end -> return result
+                   | x -> error "transaction_end" x)
       ) (function
-        | Eagain -> transaction client f
-        | e -> fail e)
+          | Eagain -> transaction client f
+          | e -> fail e)
 end

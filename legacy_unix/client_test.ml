@@ -16,12 +16,12 @@ let test_broken_callback () =
   Client.set_watch_callback client watch_callback;
 
   Client.with_xs client (fun xs ->
-    Client.watch xs "/tmp" "");
-  
+      Client.watch xs "/tmp" "");
+
   Thread.delay 1.0;
 
   Client.with_xs client (fun xs ->
-    Client.write xs "/tmp" "foo");
+      Client.write xs "/tmp" "foo");
 
   Thread.delay 1.0;
 
@@ -34,7 +34,7 @@ let test_watch_callbacks () =
   let watch_callback _ =
     let domid = 
       Client.with_xs client (fun xs ->
-	Client.read xs "domid") in
+          Client.read xs "domid") in
     finished := true;
     Printf.printf "Read domid: %s\n" domid
   in
@@ -42,10 +42,10 @@ let test_watch_callbacks () =
   Client.set_watch_callback client watch_callback;
 
   Client.with_xs client (fun xs ->
-    Client.watch xs "/tmp" "");
+      Client.watch xs "/tmp" "");
 
   Thread.delay 5.0;
-  
+
   if not !finished then
     failwith "Test failed"
 
@@ -53,9 +53,9 @@ let _ =
   test_watch_callbacks ();
   test_broken_callback ()
 
-    
-    
-    
-    
+
+
+
+
 
 

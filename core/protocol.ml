@@ -32,13 +32,13 @@ let ( |> ) f g = g f
 let ( ++ ) f g x = f (g x)
 
 type ('a, 'b) result = [
-| `Ok of 'a
-| `Error of 'b
+  | `Ok of 'a
+  | `Error of 'b
 ] [@@deriving sexp]
 
 let ( >>= ) m f = match m with
-| `Ok x -> f x
-| `Error x -> `Error x
+  | `Ok x -> f x
+  | `Error x -> `Error x
 
 let return x = `Ok x
 
@@ -46,13 +46,13 @@ let xenstore_payload_max = 4096 (* xen/include/public/io/xs_wire.h *)
 
 module Op = struct
   type t =
-  | Debug | Directory | Read | Getperms
-  | Watch | Unwatch | Transaction_start
-  | Transaction_end | Introduce | Release
-  | Getdomainpath | Write | Mkdir | Rm
-  | Setperms | Watchevent | Error | Isintroduced
-  | Resume | Set_target
-  | Restrict
+    | Debug | Directory | Read | Getperms
+    | Watch | Unwatch | Transaction_start
+    | Transaction_end | Introduce | Release
+    | Getdomainpath | Write | Mkdir | Rm
+    | Setperms | Watchevent | Error | Isintroduced
+    | Resume | Set_target
+    | Restrict
   [@@deriving sexp]
 
   let to_string t = Sexp.to_string (sexp_of_t t)
@@ -77,10 +77,10 @@ module Op = struct
 
   let to_int32 x =
     match snd (Array.fold_left
-      (fun (idx, result) v -> if x = v then (idx + 1, Some idx) else (idx + 1, result))
-      (0, None) on_the_wire) with
-      | None -> assert false (* impossible since on_the_wire contains each element *)
-      | Some i -> Int32.of_int i
+                 (fun (idx, result) v -> if x = v then (idx + 1, Some idx) else (idx + 1, result))
+                 (0, None) on_the_wire) with
+    | None -> assert false (* impossible since on_the_wire contains each element *)
+    | Some i -> Int32.of_int i
 
   let all = Array.to_list on_the_wire
 end
@@ -95,39 +95,39 @@ module Header = struct
   } [@@deriving sexp]
 
   [%%cstruct
-  type hdr = {
-    ty:  uint32_t;
-    rid: uint32_t;
-    tid: uint32_t;
-    len: uint32_t;
-  } [@@little_endian]
+    type hdr = {
+      ty:  uint32_t;
+      rid: uint32_t;
+      tid: uint32_t;
+      len: uint32_t;
+    } [@@little_endian]
   ]
 
-  let sizeof = sizeof_hdr
+    let sizeof = sizeof_hdr
 
-  let marshal t buf =
-    set_hdr_ty buf (Op.to_int32 t.ty);
-    set_hdr_rid buf t.rid;
-    set_hdr_tid buf t.tid;
-    set_hdr_len buf (Int32.of_int t.len);
-    Cstruct.shift buf sizeof_hdr
+    let marshal t buf =
+      set_hdr_ty buf (Op.to_int32 t.ty);
+      set_hdr_rid buf t.rid;
+      set_hdr_tid buf t.tid;
+      set_hdr_len buf (Int32.of_int t.len);
+      Cstruct.shift buf sizeof_hdr
 
-  let unmarshal buf =
-    if Cstruct.len buf < sizeof
-    then `Error(Printf.sprintf "Packet header is too small: %d < %d" (Cstruct.len buf) sizeof)
-    else begin
-      let ty = get_hdr_ty buf in
-      Op.of_int32 ty >>= fun ty ->
-      let rid = get_hdr_rid buf in
-      let tid = get_hdr_tid buf in
-      let len = get_hdr_len buf in
-      let len = Int32.to_int len in
-      if len > xenstore_payload_max
-      then `Error(Printf.sprintf "Packet is too large: %d > %d (see xen/include/public/io/xs_wire.h)" len xenstore_payload_max)
-      else if len < 0
-      then `Error(Printf.sprintf "Packet is too small: %d < 0" len)
-      else `Ok { tid; rid; ty; len }
-    end
+    let unmarshal buf =
+      if Cstruct.len buf < sizeof
+      then `Error(Printf.sprintf "Packet header is too small: %d < %d" (Cstruct.len buf) sizeof)
+      else begin
+        let ty = get_hdr_ty buf in
+        Op.of_int32 ty >>= fun ty ->
+        let rid = get_hdr_rid buf in
+        let tid = get_hdr_tid buf in
+        let len = get_hdr_len buf in
+        let len = Int32.to_int len in
+        if len > xenstore_payload_max
+        then `Error(Printf.sprintf "Packet is too large: %d > %d (see xen/include/public/io/xs_wire.h)" len xenstore_payload_max)
+        else if len < 0
+        then `Error(Printf.sprintf "Packet is too small: %d < 0" len)
+        else `Ok { tid; rid; ty; len }
+      end
 end
 
 module Token = struct
@@ -187,13 +187,13 @@ module Path = struct
     if String.length path > 1024
     then raise (Invalid_path (path, "paths may not be larger than 1024 bytes"));
     let absolute, fragments = match split_string '/' path with
-    | "" :: "" :: [] -> true, []
-    | "" :: path -> true, path (* preceeding '/' *)
-    | path -> false, path in
+      | "" :: "" :: [] -> true, []
+      | "" :: path -> true, path (* preceeding '/' *)
+      | path -> false, path in
     List.map (fun fragment ->
-      try Element.of_string fragment
-      with Element.Invalid_char c -> raise (Invalid_path(path, Printf.sprintf "valid paths contain only ([a-z]|[A-Z]|[0-9]|-|_|@])+ but this contained '%c'" c))
-    ) fragments
+        try Element.of_string fragment
+        with Element.Invalid_char c -> raise (Invalid_path(path, Printf.sprintf "valid paths contain only ([a-z]|[A-Z]|[0-9]|-|_|@])+ but this contained '%c'" c))
+      ) fragments
 
   let to_list t = t
 
@@ -204,8 +204,8 @@ module Path = struct
   let to_string t = String.concat "/" (List.map Element.to_string t)
 
   let dirname = function
-  | [] -> []
-  | x -> List.(rev (tl (rev x)))
+    | [] -> []
+    | x -> List.(rev (tl (rev x)))
 
   let basename x = List.(hd (rev x))
 
@@ -215,70 +215,70 @@ module Path = struct
 
   let fold f path initial =
     let rec loop acc prefix = function
-    | [] -> acc
-    | x :: xs ->
-      let prefix = prefix @ [x] in
-      loop (f prefix acc) prefix xs in
+      | [] -> acc
+      | x :: xs ->
+        let prefix = prefix @ [x] in
+        loop (f prefix acc) prefix xs in
     loop initial [] path
 
   let iter f path = fold (fun prefix () -> f prefix) path ()
 
   let common_prefix (p1: t) (p2: t) =
     let rec compare l1 l2 = match l1, l2 with
-    | h1 :: tl1, h2 :: tl2 ->
-      if h1 = h2 then h1 :: (compare tl1 tl2) else []
-    | _, [] | [], _ ->
-      (* if l1 or l2 is empty, we found the equal part already *)
-      [] in
+      | h1 :: tl1, h2 :: tl2 ->
+        if h1 = h2 then h1 :: (compare tl1 tl2) else []
+      | _, [] | [], _ ->
+        (* if l1 or l2 is empty, we found the equal part already *)
+        [] in
     compare p1 p2
 end
 
 module Name = struct
   type predefined =
-  | IntroduceDomain
-  | ReleaseDomain
+    | IntroduceDomain
+    | ReleaseDomain
   [@@deriving sexp]
 
   type t =
-  | Predefined of predefined
-  | Absolute of Path.t
-  | Relative of Path.t
+    | Predefined of predefined
+    | Absolute of Path.t
+    | Relative of Path.t
   [@@deriving sexp]
 
   let of_string = function
-  | "@introduceDomain" -> Predefined IntroduceDomain
-  | "@releaseDomain" -> Predefined ReleaseDomain
-  | path when path <> "" && path.[0] = '/' -> Absolute (Path.of_string path)
-  | path -> Relative (Path.of_string path)
+    | "@introduceDomain" -> Predefined IntroduceDomain
+    | "@releaseDomain" -> Predefined ReleaseDomain
+    | path when path <> "" && path.[0] = '/' -> Absolute (Path.of_string path)
+    | path -> Relative (Path.of_string path)
 
   let to_string = function
-  | Predefined IntroduceDomain -> "@introduceDomain"
-  | Predefined ReleaseDomain -> "@releaseDomain"
-  | Absolute path -> "/" ^ (Path.to_string path)
-  | Relative path ->        Path.to_string path
+    | Predefined IntroduceDomain -> "@introduceDomain"
+    | Predefined ReleaseDomain -> "@releaseDomain"
+    | Absolute path -> "/" ^ (Path.to_string path)
+    | Relative path ->        Path.to_string path
 
   let is_relative = function
-  | Relative _ -> true
-  | _ -> false
+    | Relative _ -> true
+    | _ -> false
 
   let resolve t relative_to = match t, relative_to with
-  | Relative path, Absolute dir -> Absolute (dir @ path)
-  | t, _ -> t
+    | Relative path, Absolute dir -> Absolute (dir @ path)
+    | t, _ -> t
 
   let relative t base = match t, base with
-  | Absolute t, Absolute base ->
-    (* If [base] is a prefix of [t], strip it off *)
-    let rec f x y = match x, y with
-    | x :: xs, y :: ys when x = y -> f xs ys
-    | [], y -> Relative y
-    | _, _ -> Absolute t in
-    f base t
-  | _, _ -> t
+    | Absolute t, Absolute base ->
+      (* If [base] is a prefix of [t], strip it off *)
+      let rec f x y = match x, y with
+        | x :: xs, y :: ys when x = y -> f xs ys
+        | [], y -> Relative y
+        | _, _ -> Absolute t in
+      f base t
+    | _, _ -> t
 
   let to_path x = match x with
-  | Predefined _ -> raise (Path.Invalid_path(to_string x, "not a valid path"))
-  | Absolute p -> p
-  | Relative p -> p
+    | Predefined _ -> raise (Path.Invalid_path(to_string x, "not a valid path"))
+    | Absolute p -> p
+    | Relative p -> p
 end
 
 module Marshal = struct
@@ -292,8 +292,8 @@ module Marshal = struct
     Cstruct.set_char t 2 '\000';
     Cstruct.shift t 3
   let rec list f xs t = match xs with
-  | [] -> t
-  | x :: xs -> list f xs (null (f x t))
+    | [] -> t
+    | x :: xs -> list f xs (null (f x t))
 
   let string x t =
     Cstruct.blit_from_string x 0 t 0 (String.length x);
@@ -318,9 +318,9 @@ module Unmarshal = struct
   let expect_unit x = if x = "" then `Ok () else `Error(Printf.sprintf "Expected an empty string, got: \"%s\"" (String.escaped x))
   let expect_ok x = if x = "OK" then `Ok () else `Error(Printf.sprintf "Expected the string \"OK\", got: \"%s\"" (String.escaped x))
   let expect_bool = function
-  | "T" -> return true
-  | "F" -> return false
-  | x -> `Error (Printf.sprintf "Expected either T or F, got: \"%s\"" (String.escaped x))
+    | "T" -> return true
+    | "F" -> return false
+    | x -> `Error (Printf.sprintf "Expected either T or F, got: \"%s\"" (String.escaped x))
 
   let expect_null_termination f t =
     if Cstruct.len t > 0 && (Cstruct.get_uint8 t (Cstruct.len t - 1) = 0)
@@ -330,10 +330,10 @@ module Unmarshal = struct
   let remove_trailing_data t =
     (* remove data beyond the last NULL *)
     let rec to_remove = function
-    | -1 -> Cstruct.len t
-    | i -> if Cstruct.get_char t i = '\000'
-           then Cstruct.len t - i - 1
-           else to_remove (i - 1) in
+      | -1 -> Cstruct.len t
+      | i -> if Cstruct.get_char t i = '\000'
+        then Cstruct.len t - i - 1
+        else to_remove (i - 1) in
     let n = to_remove (Cstruct.len t - 1) in
     Cstruct.sub t 0 (Cstruct.len t - n)
 
@@ -358,26 +358,26 @@ module Unmarshal = struct
       a :: (split ~limit: nlimit c b)
 
   let rec join acc = function
-  | [] -> return (List.rev acc)
-  | x :: xs ->
-    x >>= fun x ->
-    join (x :: acc) xs
+    | [] -> return (List.rev acc)
+    | x :: xs ->
+      x >>= fun x ->
+      join (x :: acc) xs
 
   let list f x = x |> null |> split '\000' |> List.filter (fun x -> Cstruct.len x <> 0) |> List.map f |> join []
 
   let cons a b x = x |> split ~limit:2 '\000' |> (function
-  | a' :: b' :: [] ->
-    a a' >>= fun a'' ->
-    b b' >>= fun b'' ->
-    return (a'', b'')
-  | _ -> `Error(Printf.sprintf "Failed to unmarshal a cons: got \"%s\"" (String.escaped (Cstruct.to_string x))))
+      | a' :: b' :: [] ->
+        a a' >>= fun a'' ->
+        b b' >>= fun b'' ->
+        return (a'', b'')
+      | _ -> `Error(Printf.sprintf "Failed to unmarshal a cons: got \"%s\"" (String.escaped (Cstruct.to_string x))))
   let triple a b c x = x |> null |> split '\000' |> (function
-  | a' :: b' :: c' :: [] ->
-    a a' >>= fun a'' ->
-    b b' >>= fun b'' ->
-    c c' >>= fun c'' ->
-    return (a'', b'', c'')
-  | _ -> `Error(Printf.sprintf "Failed to unmarshal a triple: got \"%s\"" (String.escaped (Cstruct.to_string x))))
+      | a' :: b' :: c' :: [] ->
+        a a' >>= fun a'' ->
+        b b' >>= fun b'' ->
+        c c' >>= fun c'' ->
+        return (a'', b'', c'')
+      | _ -> `Error(Printf.sprintf "Failed to unmarshal a triple: got \"%s\"" (String.escaped (Cstruct.to_string x))))
 
   let string    x = x |> null |> Cstruct.to_string |> return
   let int       x = x |> null |> Cstruct.to_string |> expect_int
@@ -419,13 +419,13 @@ module ACL = struct
 
   let to_string t =
     Printf.sprintf "%d%c%s" t.owner (char_of_perm t.other)
-       (String.concat "" (List.map (fun (domid, perm) -> Printf.sprintf ",%d%c" domid (char_of_perm perm)) t.acl))
+      (String.concat "" (List.map (fun (domid, perm) -> Printf.sprintf ",%d%c" domid (char_of_perm perm)) t.acl))
 
   let marshal perms buf =
     Marshal.list (fun (domid, perm) buf -> buf
-      |> Marshal.char (char_of_perm perm)
-      |> Marshal.int domid
-    ) ( (perms.owner, perms.other) :: perms.acl ) buf
+                                           |> Marshal.char (char_of_perm perm)
+                                           |> Marshal.int domid
+                 ) ( (perms.owner, perms.other) :: perms.acl ) buf
 
   let unmarshal buf =
     buf
@@ -448,201 +448,201 @@ exception Error of string
 module Response = struct
 
   type t =
-  | Read of string
-  | Directory of string list
-  | Getperms of ACL.t
-  | Getdomainpath of string
-  | Transaction_start of int32
-  | Write
-  | Mkdir
-  | Rm
-  | Setperms
-  | Watch
-  | Unwatch
-  | Transaction_end
-  | Debug of string list
-  | Introduce
-  | Resume
-  | Release
-  | Set_target
-  | Restrict
-  | Isintroduced of bool
-  | Error of string
-  | Watchevent of Name.t * string
+    | Read of string
+    | Directory of string list
+    | Getperms of ACL.t
+    | Getdomainpath of string
+    | Transaction_start of int32
+    | Write
+    | Mkdir
+    | Rm
+    | Setperms
+    | Watch
+    | Unwatch
+    | Transaction_end
+    | Debug of string list
+    | Introduce
+    | Resume
+    | Release
+    | Set_target
+    | Restrict
+    | Isintroduced of bool
+    | Error of string
+    | Watchevent of Name.t * string
   [@@deriving sexp]
 
   let to_string = function
-  | Read x -> x
-  | Directory xs -> Printf.sprintf "[ %s ]" (String.concat "; " xs)
-  | Getperms x -> ACL.to_string x
-  | Getdomainpath x -> x
-  | Transaction_start x -> Int32.to_string x
-  | Write
-  | Mkdir
-  | Rm
-  | Setperms
-  | Watch
-  | Unwatch
-  | Transaction_end -> "()"
-  | Debug xs -> Printf.sprintf "[ %s ]" (String.concat "; " xs)
-  | Introduce
-  | Resume
-  | Release
-  | Set_target
-  | Restrict -> "()"
-  | Isintroduced x -> string_of_bool x
-  | Error x -> "Error " ^ x
-  | Watchevent(name, token) -> Name.to_string name ^ ":" ^ token
+    | Read x -> x
+    | Directory xs -> Printf.sprintf "[ %s ]" (String.concat "; " xs)
+    | Getperms x -> ACL.to_string x
+    | Getdomainpath x -> x
+    | Transaction_start x -> Int32.to_string x
+    | Write
+    | Mkdir
+    | Rm
+    | Setperms
+    | Watch
+    | Unwatch
+    | Transaction_end -> "()"
+    | Debug xs -> Printf.sprintf "[ %s ]" (String.concat "; " xs)
+    | Introduce
+    | Resume
+    | Release
+    | Set_target
+    | Restrict -> "()"
+    | Isintroduced x -> string_of_bool x
+    | Error x -> "Error " ^ x
+    | Watchevent(name, token) -> Name.to_string name ^ ":" ^ token
 
   let get_ty = function
-  | Read _ -> Op.Read
-  | Directory _ -> Op.Directory
-  | Getperms _ -> Op.Getperms
-  | Getdomainpath _ -> Op.Getdomainpath
-  | Transaction_start _ -> Op.Transaction_start
-  | Debug _ -> Op.Debug
-  | Isintroduced _ -> Op.Isintroduced
-  | Watchevent (_, _) -> Op.Watchevent
-  | Error _ -> Op.Error
-  | Write -> Op.Write
-  | Mkdir -> Op.Mkdir
-  | Rm -> Op.Rm
-  | Setperms -> Op.Setperms
-  | Watch -> Op.Watch
-  | Unwatch -> Op.Unwatch
-  | Transaction_end -> Op.Transaction_end
-  | Introduce -> Op.Introduce
-  | Resume -> Op.Resume
-  | Release -> Op.Release
-  | Set_target -> Op.Set_target
-  | Restrict -> Op.Restrict
+    | Read _ -> Op.Read
+    | Directory _ -> Op.Directory
+    | Getperms _ -> Op.Getperms
+    | Getdomainpath _ -> Op.Getdomainpath
+    | Transaction_start _ -> Op.Transaction_start
+    | Debug _ -> Op.Debug
+    | Isintroduced _ -> Op.Isintroduced
+    | Watchevent (_, _) -> Op.Watchevent
+    | Error _ -> Op.Error
+    | Write -> Op.Write
+    | Mkdir -> Op.Mkdir
+    | Rm -> Op.Rm
+    | Setperms -> Op.Setperms
+    | Watch -> Op.Watch
+    | Unwatch -> Op.Unwatch
+    | Transaction_end -> Op.Transaction_end
+    | Introduce -> Op.Introduce
+    | Resume -> Op.Resume
+    | Release -> Op.Release
+    | Set_target -> Op.Set_target
+    | Restrict -> Op.Restrict
 
   let marshal x buf = let open Marshal in match x with
-  | Read x                  -> buf |> string x
-  | Directory ls            -> buf |> list string ls
-  | Getperms perms          -> buf |> ACL.marshal perms
-  | Getdomainpath x         -> buf |> string x                    |> null
-  | Transaction_start x     -> buf |> int32 x                     |> null
-  | Debug items             -> buf |> list string items
-  | Isintroduced b          -> buf |> bool b                      |> null
-  | Watchevent(path, token) -> buf |> list string [ Name.to_string path; token ]
-  | Error x                 -> buf |> string x                    |> null
-  | _                       -> buf |> ok
+    | Read x                  -> buf |> string x
+    | Directory ls            -> buf |> list string ls
+    | Getperms perms          -> buf |> ACL.marshal perms
+    | Getdomainpath x         -> buf |> string x                    |> null
+    | Transaction_start x     -> buf |> int32 x                     |> null
+    | Debug items             -> buf |> list string items
+    | Isintroduced b          -> buf |> bool b                      |> null
+    | Watchevent(path, token) -> buf |> list string [ Name.to_string path; token ]
+    | Error x                 -> buf |> string x                    |> null
+    | _                       -> buf |> ok
 
   let unmarshal hdr payload =
     let open Unmarshal in
     let ok op = ok payload >>= fun () -> return op in
-  match hdr.Header.ty with
-  | Op.Read ->
-    string payload >>= fun x ->
-    return (Read x)
-  | Op.Directory ->
-    list string payload >>= fun ls ->
-    return (Directory ls)
-  | Op.Getperms ->
-    ACL.unmarshal payload >>= fun perms ->
-    return (Getperms perms)
-  | Op.Getdomainpath ->
-    string payload >>= fun path ->
-    return (Getdomainpath path)
-  | Op.Transaction_start ->
-    int32 payload >>= fun tid ->
-    return (Transaction_start tid)
-  | Op.Debug ->
-    list string payload >>= fun debug ->
-    return (Debug debug)
-  | Op.Isintroduced ->
-    bool payload >>= fun b ->
-    return (Isintroduced b)
-  | Op.Watchevent ->
-    cons string string payload >>= fun (path, token) ->
-    return (Watchevent(Name.of_string path, token))
-  | Op.Error ->
-    string payload >>= fun x ->
-    return (Error x)
-  | Op.Write           -> ok Write
-  | Op.Mkdir           -> ok Mkdir
-  | Op.Rm              -> ok Rm
-  | Op.Setperms        -> ok Setperms
-  | Op.Watch           -> ok Watch
-  | Op.Unwatch         -> ok Unwatch
-  | Op.Transaction_end -> ok Transaction_end
-  | Op.Introduce       -> ok Introduce
-  | Op.Resume          -> ok Resume
-  | Op.Release         -> ok Release
-  | Op.Set_target      -> ok Set_target
-  | Op.Restrict        -> ok Restrict
+    match hdr.Header.ty with
+    | Op.Read ->
+      string payload >>= fun x ->
+      return (Read x)
+    | Op.Directory ->
+      list string payload >>= fun ls ->
+      return (Directory ls)
+    | Op.Getperms ->
+      ACL.unmarshal payload >>= fun perms ->
+      return (Getperms perms)
+    | Op.Getdomainpath ->
+      string payload >>= fun path ->
+      return (Getdomainpath path)
+    | Op.Transaction_start ->
+      int32 payload >>= fun tid ->
+      return (Transaction_start tid)
+    | Op.Debug ->
+      list string payload >>= fun debug ->
+      return (Debug debug)
+    | Op.Isintroduced ->
+      bool payload >>= fun b ->
+      return (Isintroduced b)
+    | Op.Watchevent ->
+      cons string string payload >>= fun (path, token) ->
+      return (Watchevent(Name.of_string path, token))
+    | Op.Error ->
+      string payload >>= fun x ->
+      return (Error x)
+    | Op.Write           -> ok Write
+    | Op.Mkdir           -> ok Mkdir
+    | Op.Rm              -> ok Rm
+    | Op.Setperms        -> ok Setperms
+    | Op.Watch           -> ok Watch
+    | Op.Unwatch         -> ok Unwatch
+    | Op.Transaction_end -> ok Transaction_end
+    | Op.Introduce       -> ok Introduce
+    | Op.Resume          -> ok Resume
+    | Op.Release         -> ok Release
+    | Op.Set_target      -> ok Set_target
+    | Op.Restrict        -> ok Restrict
 
 end
 
 module Request = struct
   type path_op =
-  | Read
-  | Directory
-  | Getperms
-  | Write of string
-  | Mkdir
-  | Rm
-  | Setperms of ACL.t
+    | Read
+    | Directory
+    | Getperms
+    | Write of string
+    | Mkdir
+    | Rm
+    | Setperms of ACL.t
   [@@deriving sexp]
 
   type t =
-  | PathOp of string * path_op
-  | Getdomainpath of int
-  | Transaction_start
-  | Watch of string * string
-  | Unwatch of string * string
-  | Transaction_end of bool
-  | Debug of string list
-  | Introduce of int * Nativeint.t * int
-  | Resume of int
-  | Release of int
-  | Set_target of int * int
-  | Restrict of int
-  | Isintroduced of int
+    | PathOp of string * path_op
+    | Getdomainpath of int
+    | Transaction_start
+    | Watch of string * string
+    | Unwatch of string * string
+    | Transaction_end of bool
+    | Debug of string list
+    | Introduce of int * Nativeint.t * int
+    | Resume of int
+    | Release of int
+    | Set_target of int * int
+    | Restrict of int
+    | Isintroduced of int
   [@@deriving sexp]
 
   let to_string = function
-  | PathOp(path, Read) -> "read " ^ path
-  | PathOp(path, Directory) -> "directory " ^ path
-  | PathOp(path, Getperms) -> "getperms " ^ path
-  | PathOp(path, Write v) -> "write " ^ path ^ " <- " ^ v
-  | PathOp(path, Mkdir) -> "mkdir " ^ path
-  | PathOp(path, Rm) -> "rm " ^ path
-  | PathOp(path, Setperms v) -> "setperms " ^ path ^ " <- " ^ (ACL.to_string v)
-  | Getdomainpath x -> "getdomainpath " ^ (string_of_int x)
-  | Transaction_start -> "transaction_start"
-  | Watch(path, tok) -> "watch " ^ path ^ " " ^ tok
-  | Unwatch(path, tok) -> "unwatch " ^ path ^ " " ^ tok
-  | Transaction_end b -> "transaction_end " ^ (string_of_bool b)
-  | Debug xs -> "debug"
-  | Introduce (domid, mfn, port) -> Printf.sprintf "introduce %d %nu %d" domid mfn port
-  | Resume x -> "resume " ^ (string_of_int x)
-  | Release x -> "release " ^ (string_of_int x)
-  | Set_target (a, b) -> "set_target " ^ (string_of_int a) ^ " <- " ^ (string_of_int b)
-  | Restrict x -> "restrict " ^ (string_of_int x)
-  | Isintroduced x -> "isintroduced " ^ (string_of_int x)
+    | PathOp(path, Read) -> "read " ^ path
+    | PathOp(path, Directory) -> "directory " ^ path
+    | PathOp(path, Getperms) -> "getperms " ^ path
+    | PathOp(path, Write v) -> "write " ^ path ^ " <- " ^ v
+    | PathOp(path, Mkdir) -> "mkdir " ^ path
+    | PathOp(path, Rm) -> "rm " ^ path
+    | PathOp(path, Setperms v) -> "setperms " ^ path ^ " <- " ^ (ACL.to_string v)
+    | Getdomainpath x -> "getdomainpath " ^ (string_of_int x)
+    | Transaction_start -> "transaction_start"
+    | Watch(path, tok) -> "watch " ^ path ^ " " ^ tok
+    | Unwatch(path, tok) -> "unwatch " ^ path ^ " " ^ tok
+    | Transaction_end b -> "transaction_end " ^ (string_of_bool b)
+    | Debug xs -> "debug"
+    | Introduce (domid, mfn, port) -> Printf.sprintf "introduce %d %nu %d" domid mfn port
+    | Resume x -> "resume " ^ (string_of_int x)
+    | Release x -> "release " ^ (string_of_int x)
+    | Set_target (a, b) -> "set_target " ^ (string_of_int a) ^ " <- " ^ (string_of_int b)
+    | Restrict x -> "restrict " ^ (string_of_int x)
+    | Isintroduced x -> "isintroduced " ^ (string_of_int x)
 
   let get_ty = function
-  | PathOp(_, Directory) -> Op.Directory
-  | PathOp(_, Read) -> Op.Read
-  | PathOp(_, Getperms) -> Op.Getperms
-  | Debug _ -> Op.Debug
-  | Watch (_, _) -> Op.Watch
-  | Unwatch (_, _) -> Op.Unwatch
-  | Transaction_start -> Op.Transaction_start
-  | Transaction_end _ -> Op.Transaction_end
-  | Introduce(_, _, _) -> Op.Introduce
-  | Release _ -> Op.Release
-  | Resume _ -> Op.Resume
-  | Getdomainpath _ -> Op.Getdomainpath
-  | PathOp(_, Write _) -> Op.Write
-  | PathOp(_, Mkdir) -> Op.Mkdir
-  | PathOp(_, Rm) -> Op.Rm
-  | PathOp(_, Setperms _) -> Op.Setperms
-  | Set_target (_, _) -> Op.Set_target
-  | Restrict _ -> Op.Restrict
-  | Isintroduced _ -> Op.Isintroduced
+    | PathOp(_, Directory) -> Op.Directory
+    | PathOp(_, Read) -> Op.Read
+    | PathOp(_, Getperms) -> Op.Getperms
+    | Debug _ -> Op.Debug
+    | Watch (_, _) -> Op.Watch
+    | Unwatch (_, _) -> Op.Unwatch
+    | Transaction_start -> Op.Transaction_start
+    | Transaction_end _ -> Op.Transaction_end
+    | Introduce(_, _, _) -> Op.Introduce
+    | Release _ -> Op.Release
+    | Resume _ -> Op.Resume
+    | Getdomainpath _ -> Op.Getdomainpath
+    | PathOp(_, Write _) -> Op.Write
+    | PathOp(_, Mkdir) -> Op.Mkdir
+    | PathOp(_, Rm) -> Op.Rm
+    | PathOp(_, Setperms _) -> Op.Setperms
+    | Set_target (_, _) -> Op.Set_target
+    | Restrict _ -> Op.Restrict
+    | Isintroduced _ -> Op.Isintroduced
 
   let unmarshal hdr payload =
     let open Unmarshal in
@@ -662,7 +662,7 @@ module Request = struct
       if txt = ""
       then return (Getdomainpath 0)
       else expect_int txt >>= fun domid ->
-      return (Getdomainpath domid)
+        return (Getdomainpath domid)
     | Op.Transaction_start -> return Transaction_start
     | Op.Write ->
       cons string string payload >>= fun (path, value) ->

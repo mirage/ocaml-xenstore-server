@@ -99,7 +99,7 @@ module Client : functor(IO: IO) -> sig
 
   val restrict : handle -> int -> unit IO.t
   (** [restrict h domid] restricts the current connection to have only
-	  the priviledges associated with domain [domid]. *)
+      	  the priviledges associated with domain [domid]. *)
 
   val getdomainpath : handle -> int -> string IO.t
   (** [getdomainpath domid] returns the local directory of domain
@@ -118,6 +118,6 @@ module Client : functor(IO: IO) -> sig
       to signal the construction of a new domain. *)
 
   val set_target : handle -> int -> int -> unit IO.t
-(** [set_target h stubdom_domid domid] called by a toolstack to
-    grant [stubdom_domid] the permissions owned by [domid]. *)
+  (** [set_target h stubdom_domid domid] called by a toolstack to
+      grant [stubdom_domid] the permissions owned by [domid]. *)
 end

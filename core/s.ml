@@ -109,5 +109,5 @@ module type CLIENT = sig
 end
 
 type persistence =
-| NoPersistence (** lose updates after a restart *)
-| Git of string (** persist all updates to a git repo on disk *)
+  | NoPersistence (** lose updates after a restart *)
+  | Git of string (** persist all updates to a git repo on disk *)

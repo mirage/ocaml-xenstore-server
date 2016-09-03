@@ -135,12 +135,12 @@ let create () =
     else
       Lwt.catch
         (fun () ->
-          Lwt_unix.connect fd sockaddr
+           Lwt_unix.connect fd sockaddr
         ) (fun _ ->
-          Lwt_unix.sleep interval
-          >>= fun () ->
-          retry (n + 1) (interval +. 0.1)
-        ) in
+            Lwt_unix.sleep interval
+            >>= fun () ->
+            retry (n + 1) (interval +. 0.1)
+          ) in
   retry 0 initial_retry_interval >>= fun () ->
   alloc (fd, sockaddr)
 
@@ -203,36 +203,36 @@ let read { fd } = complete Lwt_bytes.read fd
 let write { fd } = complete Lwt_bytes.write fd
 
 let int_of_file_descr fd =
-	let fd = Lwt_unix.unix_file_descr fd in
-	let (fd: int) = Obj.magic fd in
-	fd
+  let fd = Lwt_unix.unix_file_descr fd in
+  let (fd: int) = Obj.magic fd in
+  fd
 
 let address_of { fd } =
-	let creds = Lwt_unix.get_credentials fd in
-	let pid = creds.Lwt_unix.cred_pid in
-        Lwt.catch
-		(fun () ->
-			Lwt_io.with_file ~mode:Lwt_io.input
-				(Printf.sprintf "/proc/%d/cmdline" pid)
-				(fun ic ->
-					Lwt_io.read_line_opt ic
-					>>= fun cmdline ->
-					match cmdline with
-						| Some x -> return x
-						| None -> return "unknown")
-	>>= fun cmdline ->
-	(* Take only the binary name, stripped of directories *)
-	let filename =
-		try
-			let i = String.index cmdline '\000' in
-			String.sub cmdline 0 i
-		with Not_found -> cmdline in
-	let basename = Filename.basename filename in
-	let name = Printf.sprintf "%d:%s:%d" pid basename (int_of_file_descr fd) in
-	return (Uri.make ~scheme:"unix" ~path:name ())
-        ) (fun _ ->
-                return (Uri.make ~scheme:"unix" ~path:(string_of_int pid) ())
-	)
+  let creds = Lwt_unix.get_credentials fd in
+  let pid = creds.Lwt_unix.cred_pid in
+  Lwt.catch
+    (fun () ->
+       Lwt_io.with_file ~mode:Lwt_io.input
+         (Printf.sprintf "/proc/%d/cmdline" pid)
+         (fun ic ->
+            Lwt_io.read_line_opt ic
+            >>= fun cmdline ->
+            match cmdline with
+            | Some x -> return x
+            | None -> return "unknown")
+       >>= fun cmdline ->
+       (* Take only the binary name, stripped of directories *)
+       let filename =
+         try
+           let i = String.index cmdline '\000' in
+           String.sub cmdline 0 i
+         with Not_found -> cmdline in
+       let basename = Filename.basename filename in
+       let name = Printf.sprintf "%d:%s:%d" pid basename (int_of_file_descr fd) in
+       return (Uri.make ~scheme:"unix" ~path:name ())
+    ) (fun _ ->
+        return (Uri.make ~scheme:"unix" ~path:(string_of_int pid) ())
+      )
 
 let domain_of _ = 0
 
@@ -240,9 +240,9 @@ let domain_of _ = 0
 type server = Lwt_unix.file_descr
 
 let _ =
-	(* Make sure a write to a closed fd doesn't cause us to quit
-	   with SIGPIPE *)
-	Sys.set_signal Sys.sigpipe Sys.Signal_ignore
+  (* Make sure a write to a closed fd doesn't cause us to quit
+     	   with SIGPIPE *)
+  Sys.set_signal Sys.sigpipe Sys.Signal_ignore
 
 let listen () =
   let sockaddr = Lwt_unix.ADDR_UNIX(!xenstored_socket) in
@@ -284,8 +284,8 @@ let recv t _ =
     let payload = Cstruct.sub t.read_buffer Protocol.Header.sizeof x.Protocol.Header.len in
     read t payload >>= fun () ->
     begin match Protocol.Request.unmarshal x payload with
-    | `Error y -> return ((), `BadRequest (x, y))
-    | `Ok y -> return ((), `Ok (x, y))
+      | `Error y -> return ((), `BadRequest (x, y))
+      | `Ok y -> return ((), `Ok (x, y))
     end
 
 module Introspect = struct

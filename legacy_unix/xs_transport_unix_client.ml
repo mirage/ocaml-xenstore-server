@@ -24,10 +24,10 @@ let create () =
 let destroy (fd, _) = Unix.close fd
 let read (fd, _) = Unix.read fd
 let write (fd, _) bufs ofs len =
-	let n = Unix.write fd bufs ofs len in
-	if n <> len then begin
-		raise End_of_file
-	end
+  let n = Unix.write fd bufs ofs len in
+  if n <> len then begin
+    raise End_of_file
+  end
 
 type 'a t = 'a
 let return x = x

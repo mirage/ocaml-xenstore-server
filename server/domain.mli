@@ -14,9 +14,9 @@
 open Sexplib.Std
 
 type address = {
-	domid: int;
-	mfn: nativeint;
-	remote_port: int;
+  domid: int;
+  mfn: nativeint;
+  remote_port: int;
 } [@@deriving sexp]
 (** A remote domain address *)
 
