@@ -46,7 +46,7 @@ let make ?(prefer_merge=true) config db_m =
     let value_suffix = ".value"
     let order_suffix = ".order"
 
-    type order = string list with sexp
+    type order = string list [@@deriving sexp]
 
     let root = "/"
 

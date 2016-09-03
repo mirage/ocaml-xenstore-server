@@ -251,7 +251,7 @@ let rec accept_forever fd process =
   let (_: unit Lwt.t list) = List.map (fun x -> alloc x >>= process) conns in
   accept_forever fd process
 
-type offset = unit with sexp
+type offset = unit [@@deriving sexp]
 
 let get_read_offset _ = return ()
 let get_write_offset _ = return ()

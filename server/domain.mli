@@ -17,6 +17,6 @@ type address = {
 	domid: int;
 	mfn: nativeint;
 	remote_port: int;
-} with sexp
+} [@@deriving sexp]
 (** A remote domain address *)
 

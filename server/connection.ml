@@ -20,7 +20,7 @@ let info  fmt = Logging.info  "connection" fmt
 let error fmt = Logging.debug "connection" fmt
 
 module Watch = struct
-  type t = Protocol.Name.t * string with sexp
+  type t = Protocol.Name.t * string [@@deriving sexp]
 end
 
 type t = {

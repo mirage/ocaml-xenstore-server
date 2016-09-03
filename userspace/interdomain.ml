@@ -32,11 +32,13 @@ let fail_on_error = function
 
 (* We store the next whole packet to transmit in this persistent buffer.
    The contents are only valid iff valid <> 0 *)
-cstruct buffer {
-  uint16_t length; (* total number of payload bytes in buffer. *)
-  uint64_t offset; (* offset in the output stream to write first byte *)
-  uint8_t buffer[4112];
-} as little_endian
+[%%cstruct
+type buffer = {
+  length: uint16_t; (* total number of payload bytes in buffer. *)
+  offset: uint64_t; (* offset in the output stream to write first byte *)
+  buffer: uint8_t [@len 4112];
+} [@@little_endian]
+]
 let _ = assert(4112 = Protocol.xenstore_payload_max + Protocol.Header.sizeof)
 
 module PBuffer = struct
@@ -290,7 +292,7 @@ let write t buf =
       end in
   loop buf
 
-type offset = int64 with sexp
+type offset = int64 [@@deriving sexp]
 
 (* Flush any pending output to the channel. This function can suffer a crash and
    restart at any point. On exit, the output buffer is invalid and the whole

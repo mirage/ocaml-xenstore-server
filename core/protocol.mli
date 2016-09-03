@@ -1,5 +1,6 @@
 (*
  * Copyright (C) Citrix Systems Inc.
+ * Copyright (C) David Scott
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
@@ -45,7 +46,7 @@ module Op : sig
     | Resume
     | Set_target
     | Restrict
-  with sexp
+[@@deriving sexp]
   (** The type of xenstore operation. *)
 
   val to_string: t -> string
@@ -67,7 +68,7 @@ module Header : sig
     rid: int32; (** request id: for matching replies *)
     ty: Op.t;   (** the type of the payload *)
     len: int;   (** the length of the payload *)
-  } with sexp
+  } [@@deriving sexp]
   (** Every xenstore message starts with a fixed-length header *)
 
   val sizeof: int
@@ -103,7 +104,7 @@ end
 
 module Path : sig
   module Element : sig
-    type t with sexp
+    type t [@@deriving sexp]
     (** an element of a path *)
 
     exception Invalid_char of char
@@ -116,7 +117,7 @@ module Path : sig
     (** [to_string t] returns a string which corresponds to [t] *)
   end
 
-  type t with sexp
+  type t [@@deriving sexp]
   (** a sequence of elements representing a 'path' from one node
       in the store down to another *)
 
@@ -172,13 +173,13 @@ module Name : sig
   type predefined =
   | IntroduceDomain
   | ReleaseDomain
-  with sexp
+  [@@deriving sexp]
 
   type t =
   | Predefined of predefined
   | Absolute of Path.t
   | Relative of Path.t
-  with sexp
+  [@@deriving sexp]
   (** a Name.t refers to something which can be watched, read or
       written via the protocol. *)
 
@@ -213,19 +214,19 @@ module ACL : sig
     | READ  (** read only *)
     | WRITE (** write only *)
     | RDWR  (** read and write *)
-  with sexp
+  [@@deriving sexp]
   (** An access control list grants permissions to domains. *)
 
   val char_of_perm: perm -> char
   (** Each perm is associated with a char in the normal UI *)
 
-  type domid = int with sexp
+  type domid = int [@@deriving sexp]
 
   type t = {
     owner: domid;             (** domain which "owns", has full access *)
     other: perm;              (** default permissions for all others... *)
     acl: (domid * perm) list; (** ... unless overridden in the ACL *)
-  } with sexp
+  } [@@deriving sexp]
   (** an access control list *)
 
   val to_string: t -> string
@@ -264,7 +265,7 @@ module Response : sig
   | Isintroduced of bool
   | Error of string
   | Watchevent of Name.t * string
-  with sexp
+  [@@deriving sexp]
   (** the body of a response *)
 
   val to_string: t -> string
@@ -292,7 +293,7 @@ module Request : sig
   | Mkdir
   | Rm
   | Setperms of ACL.t
-  with sexp
+  [@@deriving sexp]
 
   type t =
   | PathOp of string * path_op
@@ -308,7 +309,7 @@ module Request : sig
   | Set_target of int * int
   | Restrict of int
   | Isintroduced of int
-  with sexp
+  [@@deriving sexp]
   (** the payload of a request *)
 
   val to_string: t -> string

@@ -15,31 +15,17 @@ open Pervasives
 open Sexplib
 open Sexplib.Std
 
-(* The packet contains a Cstruct.t *)
-module Cstruct = struct
-  include Cstruct
-  type _t = string with sexp
-  let t_of_sexp s =
-    let _t = _t_of_sexp s in
-    let c = Cstruct.create (String.length _t) in
-    Cstruct.blit_from_string _t 0 c 0 (Cstruct.len c);
-    c
-  let sexp_of_t t =
-    let _t = Cstruct.to_string t in
-    sexp_of__t _t
-end
-
 (* The IntroduceDomain message includes a Nativeint.t *)
 module Nativeint = struct
   include Nativeint
 
-  type _t = string with sexp
-  let t_of_sexp s =
-    let _t = _t_of_sexp s in
-    Nativeint.of_string _t
+  type s = string [@@deriving sexp]
+  let t_of_sexp sexp =
+    let s = s_of_sexp sexp in
+    Nativeint.of_string s
   let sexp_of_t t =
-    let _t = Nativeint.to_string t in
-    sexp_of__t _t
+    let s = Nativeint.to_string t in
+    sexp_of_s s
 end
 
 let ( |> ) f g = g f
@@ -48,7 +34,7 @@ let ( ++ ) f g x = f (g x)
 type ('a, 'b) result = [
 | `Ok of 'a
 | `Error of 'b
-] with sexp
+] [@@deriving sexp]
 
 let ( >>= ) m f = match m with
 | `Ok x -> f x
@@ -67,7 +53,7 @@ module Op = struct
   | Setperms | Watchevent | Error | Isintroduced
   | Resume | Set_target
   | Restrict
-  with sexp
+  [@@deriving sexp]
 
   let to_string t = Sexp.to_string (sexp_of_t t)
   let of_string s = t_of_sexp (Sexp.of_string s)
@@ -106,14 +92,16 @@ module Header = struct
     rid: int32;
     ty: Op.t;
     len: int;
-  } with sexp
+  } [@@deriving sexp]
 
-  cstruct hdr {
-    uint32_t ty;
-    uint32_t rid;
-    uint32_t tid;
-    uint32_t len
-  } as little_endian
+  [%%cstruct
+  type hdr = {
+    ty:  uint32_t;
+    rid: uint32_t;
+    tid: uint32_t;
+    len: uint32_t;
+  } [@@little_endian]
+  ]
 
   let sizeof = sizeof_hdr
 
@@ -143,7 +131,7 @@ module Header = struct
 end
 
 module Token = struct
-  type t = string with sexp
+  type t = string [@@deriving sexp]
 
   (** [to_user_string x] returns the user-supplied part of the watch token *)
   let to_user_string x = Scanf.sscanf x "%d:%s" (fun _ x -> x)
@@ -156,7 +144,7 @@ end
 
 module Path = struct
   module Element = struct
-    type t = string with sexp
+    type t = string [@@deriving sexp]
 
     let char_is_valid c =
       (c >= 'a' && c <= 'z') ||
@@ -177,7 +165,7 @@ module Path = struct
 
   end
 
-  type t = Element.t list with sexp
+  type t = Element.t list [@@deriving sexp]
 
   let empty = []
 
@@ -249,13 +237,13 @@ module Name = struct
   type predefined =
   | IntroduceDomain
   | ReleaseDomain
-  with sexp
+  [@@deriving sexp]
 
   type t =
   | Predefined of predefined
   | Absolute of Path.t
   | Relative of Path.t
-  with sexp
+  [@@deriving sexp]
 
   let of_string = function
   | "@introduceDomain" -> Predefined IntroduceDomain
@@ -406,7 +394,7 @@ module ACL = struct
     | READ
     | WRITE
     | RDWR
-  with sexp
+  [@@deriving sexp]
 
   let char_of_perm = function
     | READ -> 'r'
@@ -421,13 +409,13 @@ module ACL = struct
     | 'n' -> `Ok NONE
     | c -> `Error (Printf.sprintf "Unknown permission character '%c'" c)
 
-  type domid = int with sexp
+  type domid = int [@@deriving sexp]
 
   type t = {
     owner: domid;             (** domain which "owns", has full access *)
     other: perm;              (** default permissions for all others... *)
     acl: (domid * perm) list; (** ... unless overridden in the ACL *)
-  } with sexp
+  } [@@deriving sexp]
 
   let to_string t =
     Printf.sprintf "%d%c%s" t.owner (char_of_perm t.other)
@@ -481,7 +469,7 @@ module Response = struct
   | Isintroduced of bool
   | Error of string
   | Watchevent of Name.t * string
-  with sexp
+  [@@deriving sexp]
 
   let to_string = function
   | Read x -> x
@@ -596,7 +584,7 @@ module Request = struct
   | Mkdir
   | Rm
   | Setperms of ACL.t
-  with sexp
+  [@@deriving sexp]
 
   type t =
   | PathOp of string * path_op
@@ -612,7 +600,7 @@ module Request = struct
   | Set_target of int * int
   | Restrict of int
   | Isintroduced of int
-  with sexp
+  [@@deriving sexp]
 
   let to_string = function
   | PathOp(path, Read) -> "read " ^ path

@@ -60,7 +60,7 @@ module type SERVER = sig
 
   val accept_forever: server -> (connection -> unit t) -> 'a t
 
-  type offset with sexp
+  type offset [@@deriving sexp]
 
   val get_read_offset: connection -> offset t
 

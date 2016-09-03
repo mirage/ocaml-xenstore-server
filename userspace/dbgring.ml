@@ -54,15 +54,16 @@ let save_ring ring filename =
 	Cstruct.blit_to_string ring 0 s 0 (String.length s);
 	Unix.write f s 0 (String.length s);
 	Unix.close f
-
-cstruct ring {
-	uint8_t output[1024];
-	uint8_t input[1024];
-	uint32_t output_cons;
-	uint32_t output_prod;
-	uint32_t input_cons;
-	uint32_t input_prod
-} as little_endian
+[%%cstruct
+type ring = {
+	output: uint8_t [@len 1024];
+	input: uint8_t [@len 1024];
+	output_cons: uint32_t;
+	output_prod: uint32_t;
+	input_cons: uint32_t;
+	input_prod: uint32_t;
+} [@@little_endian]
+]
 
 (* true if we are sure the header is invalid, false otherwise *)
 let is_header_invalid c =
