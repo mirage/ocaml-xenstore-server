@@ -39,7 +39,11 @@ test:
 	_build/core_test/core_test.native
 	_build/server_test/server_test.native
 	_build/server_test/binary.native
+	./check-indent.sh
 
+reindent:
+	find . -name "*.ml" -exec ocp-indent -i {} \;
+	find . -name "*.mli" -exec ocp-indent -i {} \;
 
 reinstall: setup.bin
 	@ocamlfind remove xenstore || true
