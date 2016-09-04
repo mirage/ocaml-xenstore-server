@@ -17,5 +17,5 @@ type contents = {
   creator: int;
   perms: Protocol.ACL.t;
   value: string;
-} with sexp
+} [@@deriving sexp]
 (** The data contained within a Node in the tree *)

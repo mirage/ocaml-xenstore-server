@@ -18,4 +18,4 @@ type contents = {
   creator: int;
   perms: Protocol.ACL.t;
   value: string;
-} with sexp
+} [@@deriving sexp]

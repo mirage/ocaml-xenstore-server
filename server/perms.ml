@@ -23,11 +23,11 @@ type domid = int
 open Protocol.ACL
 open Sexplib.Std
 
-type elt = domid * (perm list) with sexp
+type elt = domid * (perm list) [@@deriving sexp]
 type t = {
   main: elt;
   target: elt option
-} with sexp
+} [@@deriving sexp]
 
 let superuser : t =
 	{ main = 0, [READ; WRITE];

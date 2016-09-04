@@ -14,7 +14,7 @@
 open Xenstore
 
 module Watch : sig
-  type t = Protocol.Name.t * string with sexp
+  type t = Protocol.Name.t * string [@@deriving sexp]
 end
 
 type t

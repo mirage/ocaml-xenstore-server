@@ -27,7 +27,8 @@ module type DB_S = Irmin.S
 
 let make ?(prefer_merge=true) config db_m =
   let module DB = (val db_m: DB_S) in
-  DB.create config Irmin_unix.task >>= fun db ->
+  DB.Repo.create config >>= fun repo ->
+  DB.master Irmin_unix.task repo >>= fun db ->
   (* view is no longer embedded in S_MAKER *)
   let module DB_View = Irmin.View(DB) in
   let module V = struct
@@ -46,7 +47,7 @@ let make ?(prefer_merge=true) config db_m =
     let value_suffix = ".value"
     let order_suffix = ".order"
 
-    type order = string list with sexp
+    type order = string list [@@deriving sexp]
 
     let root = "/"
 
@@ -77,9 +78,12 @@ let make ?(prefer_merge=true) config db_m =
       DB_View.of_path (db "") [] >>= fun v ->
       return { v }
     let mem t path =
-      (try_lwt
-        DB_View.mem t.v (value_of_filename path)
-       with e -> (error "%s" (Printexc.to_string e); return false))
+      Lwt.catch
+        (fun () ->
+          DB_View.mem t.v (value_of_filename path)
+        ) (fun e ->
+          error "%s" (Printexc.to_string e); return false
+        )
 
     let write t (perms: Perms.t) path contents =
         let parent = Protocol.Path.dirname path in
@@ -146,7 +150,8 @@ let make ?(prefer_merge=true) config db_m =
           return (`Ok ())
         end else return (`Eacces path)
     let list t path =
-      (try_lwt
+      Lwt.catch
+        (fun () ->
         (* TODO: differentiate a directory which doesn't exist from an empty directory
         DB.View.read (value_of_filename path) >>= function
         | None -> return (`Enoent path)
@@ -176,7 +181,9 @@ let make ?(prefer_merge=true) config db_m =
             | Some x -> return (order_of_sexp (Sexp.of_string x))
           ) >>= fun ordered ->
           return (`Ok (ordered @ (set_difference all ordered)))
-      with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
+      ) (fun e ->
+        error "%s" (Printexc.to_string e); return (`Enoent path)
+      )
 
     let rm t path =
       let (>>|=) m f = m >>= function
@@ -211,7 +218,8 @@ let make ?(prefer_merge=true) config db_m =
 *)
       return (`Ok ())
     let read t perms path =
-      (try_lwt
+      Lwt.catch
+        (fun () ->
         DB_View.read t.v (value_of_filename path) >>= function
         | None -> return (`Enoent path)
         | Some x ->
@@ -219,7 +227,9 @@ let make ?(prefer_merge=true) config db_m =
           if Perms.check perms Perms.READ contents.Node.perms
           then return (`Ok contents)
           else return (`Eacces path)
-       with e -> (error "%s" (Printexc.to_string e)); return (`Enoent path))
+       ) (fun e ->
+         error "%s" (Printexc.to_string e); return (`Enoent path)
+       )
     let exists t perms path =
       read t perms path
       >>= function

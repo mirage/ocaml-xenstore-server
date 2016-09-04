@@ -21,7 +21,7 @@ module Server = Server.Make(Sockets)
 let server =
   let open Irmin_unix in
   let module DB =
-    Irmin_mem.Make(Irmin.Contents.String)(Irmin.Tag.String)(Irmin.Hash.SHA1) in
+    Irmin_mem.Make(Irmin.Contents.String)(Irmin.Ref.String)(Irmin.Hash.SHA1) in
   let config = Irmin_mem.config () in
   Xirmin.make config (module DB)
   >>= fun store ->
@@ -30,13 +30,15 @@ let server =
   return (module S: Persistence.SERVER)
 
 let rec logging_thread logger =
-  lwt lines = Logging.get logger in
-  lwt () = Lwt_list.iter_s
+  Logging.get logger
+  >>= fun lines ->
+  Lwt_list.iter_s
     (fun x ->
       if !debug_to_stdout
       then Lwt_io.write_line Lwt_io.stdout x
       else return ()
-    ) lines in
+    ) lines
+  >>= fun () ->
   logging_thread logger
 
 let server_thread =
@@ -52,22 +54,26 @@ let fail_on_error = function
 
 let test (request, response) () =
   let open Sockets in
-  lwt c = create () in
+  create ()
+  >>= fun c ->
   let request' = Cstruct.create (String.length request) in
   Cstruct.blit_from_string request 0 request' 0 (String.length request);
   debug "writing request \"%s\"" (String.escaped request);
-  lwt () = write c request' in
+  write c request'
+  >>= fun () ->
 
   let response' = Cstruct.create 1024 in
   let header = Cstruct.sub response' 0 Protocol.Header.sizeof in
   debug "Reading header";
-  lwt () = read c header in
+  read c header
+  >>= fun () ->
   debug "Unmarshalling header";
   let payload = Cstruct.shift response' Protocol.Header.sizeof in
   fail_on_error (Protocol.Header.unmarshal header) >>= fun hdr ->
   let payload' = Cstruct.sub payload 0 (min hdr.Protocol.Header.len (Cstruct.len payload)) in
   debug "Reading payload (%d bytes)" (Cstruct.len payload');
-  lwt () = read c payload' in
+  read c payload'
+  >>= fun () ->
   let response' = Cstruct.sub response' 0 (payload'.Cstruct.off + payload'.Cstruct.len) in
   debug "read response \"%s\"" (String.escaped (Cstruct.to_string response'));
   assert_equal ~printer:String.escaped response (Cstruct.to_string response');

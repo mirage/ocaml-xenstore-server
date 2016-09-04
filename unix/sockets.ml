@@ -133,11 +133,14 @@ let create () =
     if n > retry_max
     then fail (Failure (Printf.sprintf "Failed to connect to xenstore after %.0f seconds" (Unix.gettimeofday () -. start)))
     else
-      try_lwt
-        Lwt_unix.connect fd sockaddr
-      with _ ->
-        lwt () = Lwt_unix.sleep interval in
-        retry (n + 1) (interval +. 0.1) in
+      Lwt.catch
+        (fun () ->
+          Lwt_unix.connect fd sockaddr
+        ) (fun _ ->
+          Lwt_unix.sleep interval
+          >>= fun () ->
+          retry (n + 1) (interval +. 0.1)
+        ) in
   retry 0 initial_retry_interval >>= fun () ->
   alloc (fd, sockaddr)
 
@@ -207,15 +210,17 @@ let int_of_file_descr fd =
 let address_of { fd } =
 	let creds = Lwt_unix.get_credentials fd in
 	let pid = creds.Lwt_unix.cred_pid in
-        try_lwt
-	lwt cmdline =
+        Lwt.catch
+		(fun () ->
 			Lwt_io.with_file ~mode:Lwt_io.input
 				(Printf.sprintf "/proc/%d/cmdline" pid)
 				(fun ic ->
-					lwt cmdline = Lwt_io.read_line_opt ic in
+					Lwt_io.read_line_opt ic
+					>>= fun cmdline ->
 					match cmdline with
 						| Some x -> return x
-						| None -> return "unknown") in
+						| None -> return "unknown")
+	>>= fun cmdline ->
 	(* Take only the binary name, stripped of directories *)
 	let filename =
 		try
@@ -225,8 +230,9 @@ let address_of { fd } =
 	let basename = Filename.basename filename in
 	let name = Printf.sprintf "%d:%s:%d" pid basename (int_of_file_descr fd) in
 	return (Uri.make ~scheme:"unix" ~path:name ())
-        with _ ->
+        ) (fun _ ->
                 return (Uri.make ~scheme:"unix" ~path:(string_of_int pid) ())
+	)
 
 let domain_of _ = 0
 
@@ -241,17 +247,19 @@ let _ =
 let listen () =
   let sockaddr = Lwt_unix.ADDR_UNIX(!xenstored_socket) in
   let fd = Lwt_unix.socket Lwt_unix.PF_UNIX Lwt_unix.SOCK_STREAM 0 in
-  lwt () = try_lwt Lwt_unix.unlink !xenstored_socket with _ -> return () in
+  Lwt.catch (fun () -> Lwt_unix.unlink !xenstored_socket) (fun _ -> return ())
+  >>= fun () ->
   Lwt_unix.bind fd sockaddr;
   Lwt_unix.listen fd 5;
   return fd
 
 let rec accept_forever fd process =
-  lwt conns, _ (*exn_option*) = Lwt_unix.accept_n fd 16 in
+  Lwt_unix.accept_n fd 16
+  >>= fun (conns, _exn_option) ->
   let (_: unit Lwt.t list) = List.map (fun x -> alloc x >>= process) conns in
   accept_forever fd process
 
-type offset = unit with sexp
+type offset = unit [@@deriving sexp]
 
 let get_read_offset _ = return ()
 let get_write_offset _ = return ()

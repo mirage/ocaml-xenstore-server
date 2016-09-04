@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: f762a24e853a3e513ea52685b6c47713)
+# DO NOT EDIT (digest: db4b5a4c3a0acd07688154cbc33b5ac2)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -21,9 +21,9 @@ true: annot, bin_annot
 "core/client.cmx": for-pack(Xenstore)
 "core/s.cmx": for-pack(Xenstore)
 <core/*.ml{,i,y}>: pkg_cstruct
-<core/*.ml{,i,y}>: pkg_cstruct.syntax
+<core/*.ml{,i,y}>: pkg_cstruct.ppx
 <core/*.ml{,i,y}>: pkg_lwt
-<core/*.ml{,i,y}>: pkg_lwt.syntax
+<core/*.ml{,i,y}>: pkg_ppx_sexp_conv
 <core/*.ml{,i,y}>: pkg_sexplib
 <core/*.ml{,i,y}>: pkg_uri
 # Library xenstored
@@ -38,88 +38,84 @@ true: annot, bin_annot
 "server/effects.cmx": for-pack(Xenstored)
 "server/xirmin.cmx": for-pack(Xenstored)
 <server/*.ml{,i,y}>: pkg_cstruct
-<server/*.ml{,i,y}>: pkg_cstruct.syntax
+<server/*.ml{,i,y}>: pkg_cstruct.ppx
 <server/*.ml{,i,y}>: pkg_git
 <server/*.ml{,i,y}>: pkg_irmin
 <server/*.ml{,i,y}>: pkg_irmin.unix
 <server/*.ml{,i,y}>: pkg_lwt
-<server/*.ml{,i,y}>: pkg_lwt.syntax
+<server/*.ml{,i,y}>: pkg_ppx_sexp_conv
 <server/*.ml{,i,y}>: pkg_sexplib
-<server/*.ml{,i,y}>: pkg_sexplib.syntax
 <server/*.ml{,i,y}>: pkg_uri
 <server/*.ml{,i,y}>: use_xenstore
 # Library xenstore_unix
 "unix/xenstore_unix.cmxs": use_xenstore_unix
 <unix/*.ml{,i,y}>: pkg_cstruct
-<unix/*.ml{,i,y}>: pkg_cstruct.syntax
+<unix/*.ml{,i,y}>: pkg_cstruct.ppx
 <unix/*.ml{,i,y}>: pkg_lwt
-<unix/*.ml{,i,y}>: pkg_lwt.syntax
 <unix/*.ml{,i,y}>: pkg_lwt.unix
+<unix/*.ml{,i,y}>: pkg_ppx_sexp_conv
 <unix/*.ml{,i,y}>: pkg_sexplib
 <unix/*.ml{,i,y}>: pkg_uri
 <unix/*.ml{,i,y}>: use_xenstore
 # Executable core_test
 <core_test/core_test.{native,byte}>: pkg_cstruct
-<core_test/core_test.{native,byte}>: pkg_cstruct.syntax
+<core_test/core_test.{native,byte}>: pkg_cstruct.ppx
 <core_test/core_test.{native,byte}>: pkg_lwt
-<core_test/core_test.{native,byte}>: pkg_lwt.syntax
 <core_test/core_test.{native,byte}>: pkg_lwt.unix
 <core_test/core_test.{native,byte}>: pkg_oUnit
+<core_test/core_test.{native,byte}>: pkg_ppx_sexp_conv
 <core_test/core_test.{native,byte}>: pkg_sexplib
 <core_test/core_test.{native,byte}>: pkg_uri
 <core_test/core_test.{native,byte}>: use_xenstore
 <core_test/*.ml{,i,y}>: pkg_cstruct
-<core_test/*.ml{,i,y}>: pkg_cstruct.syntax
+<core_test/*.ml{,i,y}>: pkg_cstruct.ppx
 <core_test/*.ml{,i,y}>: pkg_lwt
-<core_test/*.ml{,i,y}>: pkg_lwt.syntax
 <core_test/*.ml{,i,y}>: pkg_lwt.unix
 <core_test/*.ml{,i,y}>: pkg_oUnit
+<core_test/*.ml{,i,y}>: pkg_ppx_sexp_conv
 <core_test/*.ml{,i,y}>: pkg_sexplib
 <core_test/*.ml{,i,y}>: pkg_uri
 <core_test/*.ml{,i,y}>: use_xenstore
 <core_test/core_test.{native,byte}>: custom
 # Executable server_test
 <server_test/server_test.{native,byte}>: pkg_cstruct
-<server_test/server_test.{native,byte}>: pkg_cstruct.syntax
+<server_test/server_test.{native,byte}>: pkg_cstruct.ppx
 <server_test/server_test.{native,byte}>: pkg_git
 <server_test/server_test.{native,byte}>: pkg_irmin
 <server_test/server_test.{native,byte}>: pkg_irmin.unix
 <server_test/server_test.{native,byte}>: pkg_lwt
-<server_test/server_test.{native,byte}>: pkg_lwt.syntax
 <server_test/server_test.{native,byte}>: pkg_oUnit
+<server_test/server_test.{native,byte}>: pkg_ppx_sexp_conv
 <server_test/server_test.{native,byte}>: pkg_sexplib
-<server_test/server_test.{native,byte}>: pkg_sexplib.syntax
 <server_test/server_test.{native,byte}>: pkg_uri
 <server_test/server_test.{native,byte}>: use_xenstore
 <server_test/server_test.{native,byte}>: use_xenstored
 <server_test/server_test.{native,byte}>: custom
 # Executable server_binary_test
 <server_test/binary.{native,byte}>: pkg_cstruct
-<server_test/binary.{native,byte}>: pkg_cstruct.syntax
+<server_test/binary.{native,byte}>: pkg_cstruct.ppx
 <server_test/binary.{native,byte}>: pkg_git
 <server_test/binary.{native,byte}>: pkg_irmin
 <server_test/binary.{native,byte}>: pkg_irmin.unix
 <server_test/binary.{native,byte}>: pkg_lwt
-<server_test/binary.{native,byte}>: pkg_lwt.syntax
 <server_test/binary.{native,byte}>: pkg_lwt.unix
 <server_test/binary.{native,byte}>: pkg_oUnit
+<server_test/binary.{native,byte}>: pkg_ppx_sexp_conv
 <server_test/binary.{native,byte}>: pkg_sexplib
-<server_test/binary.{native,byte}>: pkg_sexplib.syntax
 <server_test/binary.{native,byte}>: pkg_uri
 <server_test/binary.{native,byte}>: use_xenstore
 <server_test/binary.{native,byte}>: use_xenstore_unix
 <server_test/binary.{native,byte}>: use_xenstored
 <server_test/*.ml{,i,y}>: pkg_cstruct
-<server_test/*.ml{,i,y}>: pkg_cstruct.syntax
+<server_test/*.ml{,i,y}>: pkg_cstruct.ppx
 <server_test/*.ml{,i,y}>: pkg_git
 <server_test/*.ml{,i,y}>: pkg_irmin
 <server_test/*.ml{,i,y}>: pkg_irmin.unix
 <server_test/*.ml{,i,y}>: pkg_lwt
-<server_test/*.ml{,i,y}>: pkg_lwt.syntax
 <server_test/*.ml{,i,y}>: pkg_lwt.unix
 <server_test/*.ml{,i,y}>: pkg_oUnit
+<server_test/*.ml{,i,y}>: pkg_ppx_sexp_conv
 <server_test/*.ml{,i,y}>: pkg_sexplib
-<server_test/*.ml{,i,y}>: pkg_sexplib.syntax
 <server_test/*.ml{,i,y}>: pkg_uri
 <server_test/*.ml{,i,y}>: use_xenstore
 <server_test/*.ml{,i,y}>: use_xenstore_unix
@@ -129,17 +125,16 @@ true: annot, bin_annot
 <userspace/main.{native,byte}>: use_liboxenstored_stubs
 <userspace/main.{native,byte}>: pkg_cmdliner
 <userspace/main.{native,byte}>: pkg_cstruct
-<userspace/main.{native,byte}>: pkg_cstruct.syntax
+<userspace/main.{native,byte}>: pkg_cstruct.ppx
 <userspace/main.{native,byte}>: pkg_git
 <userspace/main.{native,byte}>: pkg_io-page
 <userspace/main.{native,byte}>: pkg_io-page.unix
 <userspace/main.{native,byte}>: pkg_irmin
 <userspace/main.{native,byte}>: pkg_irmin.unix
 <userspace/main.{native,byte}>: pkg_lwt
-<userspace/main.{native,byte}>: pkg_lwt.syntax
 <userspace/main.{native,byte}>: pkg_lwt.unix
+<userspace/main.{native,byte}>: pkg_ppx_sexp_conv
 <userspace/main.{native,byte}>: pkg_sexplib
-<userspace/main.{native,byte}>: pkg_sexplib.syntax
 <userspace/main.{native,byte}>: pkg_shared-memory-ring
 <userspace/main.{native,byte}>: pkg_shared-memory-ring.xenstore
 <userspace/main.{native,byte}>: pkg_uri
@@ -151,17 +146,16 @@ true: annot, bin_annot
 <userspace/main.{native,byte}>: use_xenstored
 <userspace/*.ml{,i,y}>: pkg_cmdliner
 <userspace/*.ml{,i,y}>: pkg_cstruct
-<userspace/*.ml{,i,y}>: pkg_cstruct.syntax
+<userspace/*.ml{,i,y}>: pkg_cstruct.ppx
 <userspace/*.ml{,i,y}>: pkg_git
 <userspace/*.ml{,i,y}>: pkg_io-page
 <userspace/*.ml{,i,y}>: pkg_io-page.unix
 <userspace/*.ml{,i,y}>: pkg_irmin
 <userspace/*.ml{,i,y}>: pkg_irmin.unix
 <userspace/*.ml{,i,y}>: pkg_lwt
-<userspace/*.ml{,i,y}>: pkg_lwt.syntax
 <userspace/*.ml{,i,y}>: pkg_lwt.unix
+<userspace/*.ml{,i,y}>: pkg_ppx_sexp_conv
 <userspace/*.ml{,i,y}>: pkg_sexplib
-<userspace/*.ml{,i,y}>: pkg_sexplib.syntax
 <userspace/*.ml{,i,y}>: pkg_shared-memory-ring
 <userspace/*.ml{,i,y}>: pkg_shared-memory-ring.xenstore
 <userspace/*.ml{,i,y}>: pkg_uri
@@ -173,17 +167,16 @@ true: annot, bin_annot
 <userspace/*.ml{,i,y}>: use_xenstored
 "userspace/domains_stubs.c": pkg_cmdliner
 "userspace/domains_stubs.c": pkg_cstruct
-"userspace/domains_stubs.c": pkg_cstruct.syntax
+"userspace/domains_stubs.c": pkg_cstruct.ppx
 "userspace/domains_stubs.c": pkg_git
 "userspace/domains_stubs.c": pkg_io-page
 "userspace/domains_stubs.c": pkg_io-page.unix
 "userspace/domains_stubs.c": pkg_irmin
 "userspace/domains_stubs.c": pkg_irmin.unix
 "userspace/domains_stubs.c": pkg_lwt
-"userspace/domains_stubs.c": pkg_lwt.syntax
 "userspace/domains_stubs.c": pkg_lwt.unix
+"userspace/domains_stubs.c": pkg_ppx_sexp_conv
 "userspace/domains_stubs.c": pkg_sexplib
-"userspace/domains_stubs.c": pkg_sexplib.syntax
 "userspace/domains_stubs.c": pkg_shared-memory-ring
 "userspace/domains_stubs.c": pkg_shared-memory-ring.xenstore
 "userspace/domains_stubs.c": pkg_uri
@@ -196,19 +189,19 @@ true: annot, bin_annot
 <userspace/main.{native,byte}>: custom
 # Executable xs
 <cli/cli.{native,byte}>: pkg_cstruct
-<cli/cli.{native,byte}>: pkg_cstruct.syntax
+<cli/cli.{native,byte}>: pkg_cstruct.ppx
 <cli/cli.{native,byte}>: pkg_lwt
-<cli/cli.{native,byte}>: pkg_lwt.syntax
 <cli/cli.{native,byte}>: pkg_lwt.unix
+<cli/cli.{native,byte}>: pkg_ppx_sexp_conv
 <cli/cli.{native,byte}>: pkg_sexplib
 <cli/cli.{native,byte}>: pkg_uri
 <cli/cli.{native,byte}>: use_xenstore
 <cli/cli.{native,byte}>: use_xenstore_unix
 <cli/*.ml{,i,y}>: pkg_cstruct
-<cli/*.ml{,i,y}>: pkg_cstruct.syntax
+<cli/*.ml{,i,y}>: pkg_cstruct.ppx
 <cli/*.ml{,i,y}>: pkg_lwt
-<cli/*.ml{,i,y}>: pkg_lwt.syntax
 <cli/*.ml{,i,y}>: pkg_lwt.unix
+<cli/*.ml{,i,y}>: pkg_ppx_sexp_conv
 <cli/*.ml{,i,y}>: pkg_sexplib
 <cli/*.ml{,i,y}>: pkg_uri
 <cli/*.ml{,i,y}>: use_xenstore
@@ -216,61 +209,22 @@ true: annot, bin_annot
 <cli/cli.{native,byte}>: custom
 # Executable bench
 <bench/bench.{native,byte}>: pkg_cstruct
-<bench/bench.{native,byte}>: pkg_cstruct.syntax
+<bench/bench.{native,byte}>: pkg_cstruct.ppx
 <bench/bench.{native,byte}>: pkg_lwt
-<bench/bench.{native,byte}>: pkg_lwt.syntax
 <bench/bench.{native,byte}>: pkg_lwt.unix
+<bench/bench.{native,byte}>: pkg_ppx_sexp_conv
 <bench/bench.{native,byte}>: pkg_sexplib
 <bench/bench.{native,byte}>: pkg_uri
 <bench/bench.{native,byte}>: use_xenstore
 <bench/bench.{native,byte}>: use_xenstore_unix
 <bench/*.ml{,i,y}>: pkg_cstruct
-<bench/*.ml{,i,y}>: pkg_cstruct.syntax
+<bench/*.ml{,i,y}>: pkg_cstruct.ppx
 <bench/*.ml{,i,y}>: pkg_lwt
-<bench/*.ml{,i,y}>: pkg_lwt.syntax
 <bench/*.ml{,i,y}>: pkg_lwt.unix
+<bench/*.ml{,i,y}>: pkg_ppx_sexp_conv
 <bench/*.ml{,i,y}>: pkg_sexplib
 <bench/*.ml{,i,y}>: pkg_uri
 <bench/*.ml{,i,y}>: use_xenstore
 <bench/*.ml{,i,y}>: use_xenstore_unix
 <bench/bench.{native,byte}>: custom
 # OASIS_STOP
-true: annot
-<*/*.ml>: syntax_camlp4o
-<unix/*.ml>: pkg_lwt.syntax
-<client/*.ml>: pkg_lwt.syntax
-<server/*.ml>: pkg_lwt.syntax
-<server_test/binary.ml>: pkg_lwt.syntax
-<userspace/*.ml>: pkg_lwt.syntax
-<core/client.ml>: pkg_lwt.syntax
-<core/protocol.ml>: pkg_sexplib.syntax, syntax_camlp4o
-<core/protocol.mli>: pkg_sexplib.syntax, syntax_camlp4o
-<server/node.ml>: pkg_sexplib.syntax, syntax_camlp4o
-<server/node.mli>: pkg_sexplib.syntax, syntax_camlp4o
-<server/quota.ml>: pkg_sexplib.syntax
-<server/quota.mli>: pkg_sexplib.syntax
-<server/store.ml>: pkg_sexplib.syntax
-<server/store.mli>: pkg_sexplib.syntax
-<server/symbol.ml>: pkg_sexplib.syntax, syntax_camlp4o
-<server/symbol.mli>: pkg_sexplib.syntax, syntax_camlp4o
-<server/connection.ml>: pkg_sexplib.syntax, syntax_camlp4o
-<server/connection.mli>: pkg_sexplib.syntax, syntax_camlp4o
-<server/transaction.ml{,i}>: pkg_sexplib.syntax
-<server/domain.ml{,i}>: pkg_sexplib.syntax, syntax_camlp4o
-<server/pRef.ml>: pkg_sexplib.syntax
-<server/pBinReader.ml>: pkg_sexplib.syntax
-<server/pBinWriter.ml>: pkg_sexplib.syntax
-<server/limits.ml{,i}>: pkg_sexplib.syntax
-<server/perms.ml>: pkg_sexplib.syntax, syntax_camlp4o
-<server/perms.mli>: pkg_sexplib.syntax, syntax_camlp4o
-<server/logging_interface.ml>: pkg_sexplib.syntax
-<server/server.ml>: pkg_sexplib.syntax
-<cli/*.ml>: pkg_lwt.syntax
-<bench/*.ml>: pkg_lwt.syntax
-<core>: include
-<core/s.ml>: pkg_sexplib.syntax
-<unix/sockets.ml>: pkg_sexplib.syntax
-<userspace/interdomain.ml>: pkg_sexplib.syntax
-<client_lwt>: include
-<client_unix>: include
-<server>: include
