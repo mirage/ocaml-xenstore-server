@@ -35,9 +35,9 @@ let rec logging_thread daemon logger =
     >>= fun lines ->
     Lwt_list.iter_s
       (fun x ->
-        if daemon
-        then Lwt_log.log ~logger:syslog ~level:Lwt_log.Notice x
-        else Lwt_io.write_line Lwt_io.stdout x
+         if daemon
+         then Lwt_log.log ~logger:syslog ~level:Lwt_log.Notice x
+         else Lwt_io.write_line Lwt_io.stdout x
       ) lines in
   log_batch () >>= fun () ->
   if not(!shutting_down_logger)
@@ -81,25 +81,25 @@ let prefer_merge =
   Arg.(value & flag & info [ "prefer-merge"] ~docv:"PREFER-MERGE" ~doc)
 
 let ensure_directory_exists dir_needed =
-    if not(Sys.file_exists dir_needed && (Sys.is_directory dir_needed)) then begin
-      error "The directory (%s) doesn't exist.\n" dir_needed;
-      fail (Failure "directory does not exist")
-    end else return ()
+  if not(Sys.file_exists dir_needed && (Sys.is_directory dir_needed)) then begin
+    error "The directory (%s) doesn't exist.\n" dir_needed;
+    fail (Failure "directory does not exist")
+  end else return ()
 
 let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_merge () =
   let open Irmin_unix in
   ( match irmin_path with
-  | None ->
-    info "No database provided: will use an in-memory database";
-    let module DB =
-      Irmin_mem.Make(Irmin.Contents.String)(Irmin.Ref.String)(Irmin.Hash.SHA1) in
-    let config = Irmin_mem.config () in
-    return (config, (module DB: Xirmin.DB_S))
-  | Some x ->
-    let module DB =
-      Irmin_git.FS(Irmin.Contents.String)(Irmin.Ref.String)(Irmin.Hash.SHA1) in
-    let config = Irmin_git.config ~root:x ~bare:true () in
-    return (config, (module DB: Xirmin.DB_S))
+    | None ->
+      info "No database provided: will use an in-memory database";
+      let module DB =
+        Irmin_mem.Make(Irmin.Contents.String)(Irmin.Ref.String)(Irmin.Hash.SHA1) in
+      let config = Irmin_mem.config () in
+      return (config, (module DB: Xirmin.DB_S))
+    | Some x ->
+      let module DB =
+        Irmin_git.FS(Irmin.Contents.String)(Irmin.Ref.String)(Irmin.Hash.SHA1) in
+      let config = Irmin_git.config ~root:x ~bare:true () in
+      return (config, (module DB: Xirmin.DB_S))
   ) >>= fun (config, db_m) ->
 
   Xirmin.make ~prefer_merge config db_m
@@ -109,9 +109,9 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
   let module UnixServer = Server.Make(Sockets)(V) in
   let module DomainServer = Server.Make(Interdomain)(V) in
   ( if not enable_xen && (not enable_unix) then begin
-      error "You must specify at least one transport (--enable-unix and/or --enable-xen)";
-      fail (Failure "no transports specified")
-    end else return () )
+        error "You must specify at least one transport (--enable-unix and/or --enable-xen)";
+        fail (Failure "no transports specified")
+      end else return () )
   >>= fun () ->
 
   ( if enable_unix
@@ -125,23 +125,23 @@ let program_thread daemon path pidfile enable_xen enable_unix irmin_path prefer_
   >>= fun () ->
 
   ( if daemon then begin
-    Lwt.catch
-      (fun () ->
-      debug "Writing pidfile %s" pidfile;
-      (try Unix.unlink pidfile with _ -> ());
-      let pid = Unix.getpid () in
-      Lwt_io.with_file pidfile ~mode:Lwt_io.output (fun chan -> Lwt_io.fprintlf chan "%d" pid)
-      >>= fun () ->
+        Lwt.catch
+          (fun () ->
+             debug "Writing pidfile %s" pidfile;
+             (try Unix.unlink pidfile with _ -> ());
+             let pid = Unix.getpid () in
+             Lwt_io.with_file pidfile ~mode:Lwt_io.output (fun chan -> Lwt_io.fprintlf chan "%d" pid)
+             >>= fun () ->
+             return ()
+          ) (function Unix.Unix_error(Unix.EACCES, _, _) ->
+              error "Permission denied (EACCES) writing pidfile %s" pidfile;
+              error "Try a new --pidfile path or running this program with more privileges";
+              fail (Failure "EACCES writing pidfile")
+                    | e -> Lwt.fail e)
+      end else begin
+      debug "We are not daemonising so no need for a pidfile.";
       return ()
-    ) (function Unix.Unix_error(Unix.EACCES, _, _) ->
-      error "Permission denied (EACCES) writing pidfile %s" pidfile;
-      error "Try a new --pidfile path or running this program with more privileges";
-      fail (Failure "EACCES writing pidfile")
-      | e -> Lwt.fail e)
-  end else begin
-    debug "We are not daemonising so no need for a pidfile.";
-    return ()
-  end)
+    end)
   >>= fun () ->
   let (a: unit Lwt.t) =
     if enable_unix then begin
@@ -181,8 +181,8 @@ let with_logging daemon program_thread =
   info "User-space xenstored version %s starting" Version.version;
   let l_t = logging_thread daemon Logging.logger in
   Lwt.catch program_thread (fun e ->
-    error "Main thread threw %s" (Printexc.to_string e);
-    return ()) >>= fun () ->
+      error "Main thread threw %s" (Printexc.to_string e);
+      return ()) >>= fun () ->
   shutdown_logger ();
   l_t
 

@@ -53,12 +53,12 @@ let rpc store c tid request =
 let run store (sequence: (Connection.t * int32 * Protocol.Request.t * Protocol.Response.t) list) =
   let open Lwt in
   Lwt_main.run (Lwt_list.iter_s
-    (fun (c, tid, request, expected_result) ->
-      rpc store c tid request >>= fun actual ->
-      (* Store.dump_stdout store; *)
-      assert_equal ~printer:(fun x -> Sexp.to_string (Protocol.Response.sexp_of_t x)) expected_result (fst actual);
-      return ()
-    ) sequence)
+                  (fun (c, tid, request, expected_result) ->
+                     rpc store c tid request >>= fun actual ->
+                     (* Store.dump_stdout store; *)
+                     assert_equal ~printer:(fun x -> Sexp.to_string (Protocol.Response.sexp_of_t x)) expected_result (fst actual);
+                     return ()
+                  ) sequence)
 
 let interdomain domid = Uri.make ~scheme:"domain" ~path:(string_of_int domid) ()
 
@@ -141,13 +141,13 @@ let begin_transaction store c =
   let open Lwt in
   let t =
     Lwt.catch (fun () ->
-      rpc store c none Protocol.Request.Transaction_start >>= function
-      | Protocol.Response.Transaction_start tid, _ -> return tid
-      | _, _ -> failwith "begin_transaction")
-    (function
-      | e -> raise e
-    ) in
-    Lwt_main.run t
+        rpc store c none Protocol.Request.Transaction_start >>= function
+        | Protocol.Response.Transaction_start tid, _ -> return tid
+        | _, _ -> failwith "begin_transaction")
+      (function
+        | e -> raise e
+      ) in
+  Lwt_main.run t
 
 let test_mkdir () =
   (* Check that mkdir creates usable nodes *)
@@ -214,101 +214,101 @@ let test_restrict () =
   ]
 
 let test_set_target () =
-	(* Check that dom0 can grant dom1 access to dom2's nodes,
-	   without which it wouldn't have access. *)
-        let dom0 = connect 0 in
-        let dom7 = connect 7 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	run store [
-		dom0, none, PathOp("/foo", Write "bar"), Response.Write;
-		dom0, none, PathOp("/foo", Setperms example_acl), Response.Setperms;
-		dom7, none, PathOp("/foo", Write "bar"), Response.Error "EACCES";
-		dom0, none, Set_target(7, 5), Response.Set_target;
-		dom7, none, PathOp("/foo", Write "bar"), Response.Write;
-	]
+  (* Check that dom0 can grant dom1 access to dom2's nodes,
+     	   without which it wouldn't have access. *)
+  let dom0 = connect 0 in
+  let dom7 = connect 7 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  run store [
+    dom0, none, PathOp("/foo", Write "bar"), Response.Write;
+    dom0, none, PathOp("/foo", Setperms example_acl), Response.Setperms;
+    dom7, none, PathOp("/foo", Write "bar"), Response.Error "EACCES";
+    dom0, none, Set_target(7, 5), Response.Set_target;
+    dom7, none, PathOp("/foo", Write "bar"), Response.Write;
+  ]
 
 let test_transactions_are_isolated () =
-	(* Check that other connections cannot see the nodes created
-	   within an uncommitted transaction *)
-        let dom0 = connect 0 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-        let tid = begin_transaction store dom0 in
+  (* Check that other connections cannot see the nodes created
+     	   within an uncommitted transaction *)
+  let dom0 = connect 0 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  let tid = begin_transaction store dom0 in
 
-	run store [
-		dom0, tid, PathOp("/foo", Write "bar"), Response.Write;
-		dom0, none, PathOp("/foo", Read), Response.Error "ENOENT";
-		dom0, tid, Transaction_end true, Response.Transaction_end;
-		dom0, none, PathOp("/foo", Read), Response.Read "bar";
-	]
+  run store [
+    dom0, tid, PathOp("/foo", Write "bar"), Response.Write;
+    dom0, none, PathOp("/foo", Read), Response.Error "ENOENT";
+    dom0, tid, Transaction_end true, Response.Transaction_end;
+    dom0, none, PathOp("/foo", Read), Response.Read "bar";
+  ]
 
 let test_independent_transactions_coalesce () =
-	(* Check that two parallel, unrelated transactions can be
-	   coalesced properly *)
-        let dom0 = connect 0 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
+  (* Check that two parallel, unrelated transactions can be
+     	   coalesced properly *)
+  let dom0 = connect 0 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
 
-	run store [
-		dom0, none, PathOp("/a/b", Mkdir), Response.Mkdir;
-		dom0, none, PathOp("/1/2", Mkdir), Response.Mkdir;
-	];
-        let tid_1 = begin_transaction store dom0 in
-        let tid_2 = begin_transaction store dom0 in
-	run store [
-		dom0, tid_1, PathOp("/a/b", Write "foo"), Response.Write;
-		dom0, tid_2, PathOp("/1/2", Write "foo"), Response.Write;
-		dom0, tid_1, Transaction_end true, Response.Transaction_end;
-		dom0, tid_2, Transaction_end true, Response.Transaction_end;
-		dom0, none, PathOp("/a/b", Read), Response.Read "foo";
-		dom0, none, PathOp("/1/2", Read), Response.Read "foo";
-	]
+  run store [
+    dom0, none, PathOp("/a/b", Mkdir), Response.Mkdir;
+    dom0, none, PathOp("/1/2", Mkdir), Response.Mkdir;
+  ];
+  let tid_1 = begin_transaction store dom0 in
+  let tid_2 = begin_transaction store dom0 in
+  run store [
+    dom0, tid_1, PathOp("/a/b", Write "foo"), Response.Write;
+    dom0, tid_2, PathOp("/1/2", Write "foo"), Response.Write;
+    dom0, tid_1, Transaction_end true, Response.Transaction_end;
+    dom0, tid_2, Transaction_end true, Response.Transaction_end;
+    dom0, none, PathOp("/a/b", Read), Response.Read "foo";
+    dom0, none, PathOp("/1/2", Read), Response.Read "foo";
+  ]
 
 let test_device_create_coalesce () =
-	(* Check that two parallel, device-creating transactions can coalesce *)
-        let dom0 = connect 0 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	run store [
-		dom0, none, PathOp("/local/domain/0/backend/vbd", Mkdir), Response.Mkdir;
-		dom0, none, PathOp("/local/domain/1/device/vbd", Mkdir), Response.Mkdir;
-		dom0, none, PathOp("/local/domain/2/device/vbd", Mkdir), Response.Mkdir;
-	];
-        let tid_1 = begin_transaction store dom0 in
-        let tid_2 = begin_transaction store dom0 in
-	run store [
-		dom0, tid_1, PathOp("/local/domain/0/backend/vbd/1/51712", Write "hello"), Response.Write;
-		dom0, tid_1, PathOp("/local/domain/1/device/vbd/51712", Write "there"), Response.Write;
-		dom0, tid_2, PathOp("/local/domain/0/backend/vbd/2/51712", Write "hello"), Response.Write;
-		dom0, tid_2, PathOp("/local/domain/2/device/vbd/51712", Write "there"), Response.Write;
-		dom0, tid_1, Transaction_end true, Response.Transaction_end;
-		dom0, tid_2, Transaction_end true, Response.Transaction_end;
-		dom0, none, PathOp("/local/domain/0/backend/vbd/1/51712", Read), Response.Read "hello";
-		dom0, none, PathOp("/local/domain/0/backend/vbd/2/51712", Read), Response.Read "hello";
-	]
+  (* Check that two parallel, device-creating transactions can coalesce *)
+  let dom0 = connect 0 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  run store [
+    dom0, none, PathOp("/local/domain/0/backend/vbd", Mkdir), Response.Mkdir;
+    dom0, none, PathOp("/local/domain/1/device/vbd", Mkdir), Response.Mkdir;
+    dom0, none, PathOp("/local/domain/2/device/vbd", Mkdir), Response.Mkdir;
+  ];
+  let tid_1 = begin_transaction store dom0 in
+  let tid_2 = begin_transaction store dom0 in
+  run store [
+    dom0, tid_1, PathOp("/local/domain/0/backend/vbd/1/51712", Write "hello"), Response.Write;
+    dom0, tid_1, PathOp("/local/domain/1/device/vbd/51712", Write "there"), Response.Write;
+    dom0, tid_2, PathOp("/local/domain/0/backend/vbd/2/51712", Write "hello"), Response.Write;
+    dom0, tid_2, PathOp("/local/domain/2/device/vbd/51712", Write "there"), Response.Write;
+    dom0, tid_1, Transaction_end true, Response.Transaction_end;
+    dom0, tid_2, Transaction_end true, Response.Transaction_end;
+    dom0, none, PathOp("/local/domain/0/backend/vbd/1/51712", Read), Response.Read "hello";
+    dom0, none, PathOp("/local/domain/0/backend/vbd/2/51712", Read), Response.Read "hello";
+  ]
 
 let test_transactions_really_do_conflict () =
-	(* Check that transactions that really can't interleave are aborted *)
-        let dom0 = connect 0 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	run store [
-		dom0, none, PathOp("/a", Mkdir), Response.Mkdir;
-	];
-        let tid = begin_transaction store dom0 in
-	run store [
-                dom0, tid, PathOp("/a", Directory), Response.Directory [];
-		dom0, none, PathOp("/a/b", Write "hello"), Response.Write;
-		dom0, tid, PathOp("/a/b", Write "there"), Response.Write;
-		dom0, tid, Transaction_end true, Response.Error "EAGAIN";
-		dom0, none, PathOp("/a/b", Read), Response.Read "hello"
-	]
+  (* Check that transactions that really can't interleave are aborted *)
+  let dom0 = connect 0 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  run store [
+    dom0, none, PathOp("/a", Mkdir), Response.Mkdir;
+  ];
+  let tid = begin_transaction store dom0 in
+  run store [
+    dom0, tid, PathOp("/a", Directory), Response.Directory [];
+    dom0, none, PathOp("/a/b", Write "hello"), Response.Write;
+    dom0, tid, PathOp("/a/b", Write "there"), Response.Write;
+    dom0, tid, Transaction_end true, Response.Error "EAGAIN";
+    dom0, none, PathOp("/a/b", Read), Response.Read "hello"
+  ]
 
 let assert_watches c expected =
   let q = if Hashtbl.mem watch_queues c then Hashtbl.find watch_queues c else Queue.create () in
@@ -323,7 +323,7 @@ let assert_watches c expected =
   assert_equal ~msg:"watches" ~printer:(fun x -> String.concat "; " (List.map (fun (k, v) -> k ^ ", " ^ v) x)) expected filtered
 
 let clear_watches c =
-	Hashtbl.remove watch_queues c
+  Hashtbl.remove watch_queues c
 
 (*
 let test_watch_event_quota () =
@@ -370,68 +370,68 @@ let test_watch_event_quota () =
 *)
 
 let test_simple_watches () =
-	(* Check that writes generate watches and reads do not *)
-        let dom0 = connect 0 in
-        let dom1 = connect 1 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	(* No watch events are generated without registering *)
-	run store [
-		dom0, none, PathOp("/a", Mkdir), Response.Mkdir;
-		dom0, none, PathOp("/a", Setperms Protocol.ACL.({ owner = 0; other = RDWR; acl = []})), Response.Setperms;
-	];
-	assert_watches dom0 [];
-	run store [
-		dom0, none, Watch ("/a", "token"), Response.Watch;
-	];
-	assert_watches dom0 [ ("/a", "token") ];
-	clear_watches dom0;
-	assert_watches dom0 [];
-	(* dom0 can see its own write via watches *)
-	run store [
-		dom0, none, PathOp("/a", Write "foo"), Response.Write;
-	];
-	assert_watches dom0 [ ("/a", "token") ];
-	clear_watches dom0;
-	assert_watches dom0 [];
-	(* dom0 can see dom1's writes via watches *)
-	(* NB Irmin will not generate a watch if a value is not updated. This is a
-           difference with the old implementation. *)
-	run store [
-		dom1, none, PathOp("/a", Write "foo2"), Response.Write;
-	];
-	assert_watches dom0 [ ("/a", "token") ];
-	clear_watches dom0;
-	assert_watches dom0 [];
-	(* reads don't generate watches *)
-	run store [
-		dom0, none, PathOp("/a", Read), Response.Read "foo2";
-		dom0, none, PathOp("/a/1", Read), Response.Error "ENOENT";
-		dom1, none, PathOp("/a", Read), Response.Read "foo2";
-		dom1, none, PathOp("/a/1", Read), Response.Error "ENOENT";
-	];
-	assert_watches dom0 []
+  (* Check that writes generate watches and reads do not *)
+  let dom0 = connect 0 in
+  let dom1 = connect 1 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  (* No watch events are generated without registering *)
+  run store [
+    dom0, none, PathOp("/a", Mkdir), Response.Mkdir;
+    dom0, none, PathOp("/a", Setperms Protocol.ACL.({ owner = 0; other = RDWR; acl = []})), Response.Setperms;
+  ];
+  assert_watches dom0 [];
+  run store [
+    dom0, none, Watch ("/a", "token"), Response.Watch;
+  ];
+  assert_watches dom0 [ ("/a", "token") ];
+  clear_watches dom0;
+  assert_watches dom0 [];
+  (* dom0 can see its own write via watches *)
+  run store [
+    dom0, none, PathOp("/a", Write "foo"), Response.Write;
+  ];
+  assert_watches dom0 [ ("/a", "token") ];
+  clear_watches dom0;
+  assert_watches dom0 [];
+  (* dom0 can see dom1's writes via watches *)
+  (* NB Irmin will not generate a watch if a value is not updated. This is a
+            difference with the old implementation. *)
+  run store [
+    dom1, none, PathOp("/a", Write "foo2"), Response.Write;
+  ];
+  assert_watches dom0 [ ("/a", "token") ];
+  clear_watches dom0;
+  assert_watches dom0 [];
+  (* reads don't generate watches *)
+  run store [
+    dom0, none, PathOp("/a", Read), Response.Read "foo2";
+    dom0, none, PathOp("/a/1", Read), Response.Error "ENOENT";
+    dom1, none, PathOp("/a", Read), Response.Read "foo2";
+    dom1, none, PathOp("/a/1", Read), Response.Error "ENOENT";
+  ];
+  assert_watches dom0 []
 
 let test_relative_watches () =
-	(* Check that watches for relative paths *)
-        let dom0 = connect 0 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	(* No watch events are generated without registering *)
-	run store [
-		dom0, none, PathOp("/local/domain/0/name", Write ""), Response.Write;
-		dom0, none, PathOp("/local/domain/0/device", Write ""), Response.Write;
-		dom0, none, Watch("device", "token"), Response.Watch;
-	];
-	assert_watches dom0 [ "device", "token" ];
-	clear_watches dom0;
-	assert_watches dom0 [];
-	run store [
-		dom0, none, PathOp("/local/domain/0/device/vbd", Write "hello"), Response.Write;
-	];
-	assert_watches dom0 [ "device/vbd", "token" ]
+  (* Check that watches for relative paths *)
+  let dom0 = connect 0 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  (* No watch events are generated without registering *)
+  run store [
+    dom0, none, PathOp("/local/domain/0/name", Write ""), Response.Write;
+    dom0, none, PathOp("/local/domain/0/device", Write ""), Response.Write;
+    dom0, none, Watch("device", "token"), Response.Watch;
+  ];
+  assert_watches dom0 [ "device", "token" ];
+  clear_watches dom0;
+  assert_watches dom0 [];
+  run store [
+    dom0, none, PathOp("/local/domain/0/device/vbd", Write "hello"), Response.Write;
+  ];
+  assert_watches dom0 [ "device/vbd", "token" ]
 (*
 let test_watches_read_perm () =
 	(* Check that a connection only receives a watch if it
@@ -455,53 +455,53 @@ let test_watches_read_perm () =
 *)
 
 let test_transaction_watches () =
-	(* Check that watches only appear on transaction commit
-	   and not at all in the case of abort *)
-        let dom0 = connect 0 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	run store [
-		dom0, none, Watch ("/a", "token"), Response.Watch;
-	];
-	assert_watches dom0 [ ("/a", "token") ];
-	clear_watches dom0;
-	assert_watches dom0 [];
-	(* PathOp( Writes in a transaction don't generate watches immediately *)
-        let tid = begin_transaction store dom0 in
-	run store [
-		dom0, tid, PathOp("/a", Write "hello"), Response.Write;
-	];
-	assert_watches dom0 [];
-	(* If the transaction is aborted then no watches are generated *)
-	run store [
-		dom0, tid, Transaction_end false, Response.Transaction_end
-	];
-	assert_watches dom0 [];
-	(* If the transaction successfully commits then the watches appear *)
-        let tid = begin_transaction store dom0 in
-	run store [
-		dom0, tid, PathOp("/a", Write "hello"), Response.Write;
-		dom0, tid, Transaction_end true, Response.Transaction_end
-	];
-	assert_watches dom0 [ ("/a", "token") ]
+  (* Check that watches only appear on transaction commit
+     	   and not at all in the case of abort *)
+  let dom0 = connect 0 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  run store [
+    dom0, none, Watch ("/a", "token"), Response.Watch;
+  ];
+  assert_watches dom0 [ ("/a", "token") ];
+  clear_watches dom0;
+  assert_watches dom0 [];
+  (* PathOp( Writes in a transaction don't generate watches immediately *)
+  let tid = begin_transaction store dom0 in
+  run store [
+    dom0, tid, PathOp("/a", Write "hello"), Response.Write;
+  ];
+  assert_watches dom0 [];
+  (* If the transaction is aborted then no watches are generated *)
+  run store [
+    dom0, tid, Transaction_end false, Response.Transaction_end
+  ];
+  assert_watches dom0 [];
+  (* If the transaction successfully commits then the watches appear *)
+  let tid = begin_transaction store dom0 in
+  run store [
+    dom0, tid, PathOp("/a", Write "hello"), Response.Write;
+    dom0, tid, Transaction_end true, Response.Transaction_end
+  ];
+  assert_watches dom0 [ ("/a", "token") ]
 
 let test_introduce_watches () =
-	(* Check that @introduceDomain watches appear on introduce *)
-        let dom0 = connect 0 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	run store [
-		dom0, none, Watch ("@introduceDomain", "token"), Response.Watch;
-	];
-	assert_watches dom0 [ ("@introduceDomain", "token") ];
-	clear_watches dom0;
-	assert_watches dom0 [];
-	run store [
-		dom0, none, Introduce(5, 5n, 5), Response.Introduce;
-	];
-	assert_watches dom0 [ ("@introduceDomain", "token") ]
+  (* Check that @introduceDomain watches appear on introduce *)
+  let dom0 = connect 0 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  run store [
+    dom0, none, Watch ("@introduceDomain", "token"), Response.Watch;
+  ];
+  assert_watches dom0 [ ("@introduceDomain", "token") ];
+  clear_watches dom0;
+  assert_watches dom0 [];
+  run store [
+    dom0, none, Introduce(5, 5n, 5), Response.Introduce;
+  ];
+  assert_watches dom0 [ ("@introduceDomain", "token") ]
 
 (*
 let test_release_watches () =
@@ -521,15 +521,15 @@ let test_bounded_watch_events () =
 	()
 *)
 let test_rm_root () =
-        (* Check that deleting / fails *)
-        let dom0 = connect 0 in
-	let store = empty_store () in
-        let open Protocol in
-	let open Protocol.Request in
-	run store [
-		(* Removing the root node is forbidden *)
-		dom0, none, PathOp("/", Rm), Response.Error "EINVAL";
-	]
+  (* Check that deleting / fails *)
+  let dom0 = connect 0 in
+  let store = empty_store () in
+  let open Protocol in
+  let open Protocol.Request in
+  run store [
+    (* Removing the root node is forbidden *)
+    dom0, none, PathOp("/", Rm), Response.Error "EINVAL";
+  ]
 
 (*
 let test_quota () =
@@ -691,27 +691,27 @@ let _ =
     "Test xenstore server code";
 
   let suite = "xenstore" >:::
-    [
-		"test_implicit_create" >:: test_implicit_create;
+              [
+                "test_implicit_create" >:: test_implicit_create;
 (*
 		"test_directory_order" >:: test_directory_order;
 *)
-		"getperms(setperms)" >:: test_setperms_getperms;
-		"test_setperms_owner" >:: test_setperms_owner;
-		"test_mkdir" >:: test_mkdir;
-		"test_empty" >:: test_empty;
-		"test_rm" >:: test_rm;
-		"test_restrict" >:: test_restrict;
-		"test_set_target" >:: test_set_target;
-		"transactions_are_isolated" >:: test_transactions_are_isolated;
-		"independent_transactions_coalesce" >:: test_independent_transactions_coalesce;
-		"device_create_coalesce" >:: test_device_create_coalesce;
-		"test_transactions_really_do_conflict" >:: test_transactions_really_do_conflict;
-		"test_simple_watches" >:: test_simple_watches;
-		"test_relative_watches" >:: test_relative_watches;
-(*		"test_watches_read_perm" >:: test_watches_read_perm; *)
-		"test_transaction_watches" >:: test_transaction_watches;
-		"test_introduce_watches" >:: test_introduce_watches;
+                "getperms(setperms)" >:: test_setperms_getperms;
+                "test_setperms_owner" >:: test_setperms_owner;
+                "test_mkdir" >:: test_mkdir;
+                "test_empty" >:: test_empty;
+                "test_rm" >:: test_rm;
+                "test_restrict" >:: test_restrict;
+                "test_set_target" >:: test_set_target;
+                "transactions_are_isolated" >:: test_transactions_are_isolated;
+                "independent_transactions_coalesce" >:: test_independent_transactions_coalesce;
+                "device_create_coalesce" >:: test_device_create_coalesce;
+                "test_transactions_really_do_conflict" >:: test_transactions_really_do_conflict;
+                "test_simple_watches" >:: test_simple_watches;
+                "test_relative_watches" >:: test_relative_watches;
+                (*		"test_watches_read_perm" >:: test_watches_read_perm; *)
+                "test_transaction_watches" >:: test_transaction_watches;
+                "test_introduce_watches" >:: test_introduce_watches;
                 "test_rm_root" >:: test_rm_root;
 (*
 		"test_quota" >:: test_quota;
@@ -723,5 +723,5 @@ let _ =
 		"test_watch_event_quota" >:: test_watch_event_quota;
 		"test_control_perms" >:: test_control_perms;
 *)
-	] in
+              ] in
   run_test_tt ~verbose:!verbose suite

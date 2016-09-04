@@ -55,7 +55,7 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
     let effects = ref initial_state in
 
     let origin = Printf.sprintf "Accepted connection %d from domain %d over %s"
-      (C.index c) domid (match Uri.scheme address with None -> "unknown protocol" | Some x -> x) in
+        (C.index c) domid (match Uri.scheme address with None -> "unknown protocol" | Some x -> x) in
 
     V.merge v origin >>= fun ok ->
     if not ok then error "Failed to commit the connection transaction";
@@ -89,13 +89,13 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
 
     Lwt.catch
       (fun () ->
-      let rec loop () =
-        (* (Re-)complete any outstanding request. In the event of a crash
-           these steps will be re-executed. Each step must therefore be
-           idempotent. *)
+         let rec loop () =
+           (* (Re-)complete any outstanding request. In the event of a crash
+              these steps will be re-executed. Each step must therefore be
+              idempotent. *)
 
-        (* First execute the idempotent side_effects *)
-        let r = !effects in
+           (* First execute the idempotent side_effects *)
+           let r = !effects in
 (*
         Quota.limits_of_domain dom >>= fun (limits, e2) ->
         let side_effects = Transaction.(e1 ++ e2) in
@@ -117,74 +117,74 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
         let side_effects = Transaction.(side_effects ++ e) in
         Lwt_list.iter_s Introduce.introduce (Transaction.get_domains r.side_effects) >>= fun () ->
 *)
-        let perms = C.perms c in
+           let perms = C.perms c in
 (*
         let origin =
           Printf.sprintf "Resynchronising state for connection %d domain %d"
           (Connection.index c) dom in
         Database.persist ~origin side_effects >>= fun () ->
 *)
-        (* Second transmit the response packet *)
-        T.flush t r.next_write_ofs >>= fun () ->
-        Lwt_mutex.unlock write_m;
+           (* Second transmit the response packet *)
+           T.flush t r.next_write_ofs >>= fun () ->
+           Lwt_mutex.unlock write_m;
 
-        (* Read the next request, parse, and compute the response actions.
-           The transient in-memory store is updated. Other side-effects are
-           computed but not executed. *)
-        ( T.recv t r.next_read_ofs >>= function
-          | read_ofs, `Ok (hdr, request) ->
+           (* Read the next request, parse, and compute the response actions.
+              The transient in-memory store is updated. Other side-effects are
+              computed but not executed. *)
+           ( T.recv t r.next_read_ofs >>= function
+               | read_ofs, `Ok (hdr, request) ->
           (*
 	          C.pop_watch_events_nowait c >>= fun events ->
 *)
-            Lwt_mutex.lock write_m >>= fun () ->
-            (* This will 'commit' updates to the in-memory store: *)
+                 Lwt_mutex.lock write_m >>= fun () ->
+                 (* This will 'commit' updates to the in-memory store: *)
 (*
             E.reply v (Some limits) perm c hdr request >>= fun (response, side_effects) ->
 *)
-            E.reply c domid perms hdr send_watch_event request >>= fun (response, side_effects) ->
-            let hdr = Protocol.({ hdr with Header.ty = Response.get_ty response}) in
-            return (hdr, response, side_effects, read_ofs)
-          | read_ofs, `BadRequest (hdr, msg) ->
-            (* quirk: if this is a NULL-termination error then it should be EINVAL *)
-            let response = Protocol.Response.Error "EINVAL" in
-            Lwt_mutex.lock write_m >>= fun () ->
-            let hdr = { hdr with Protocol.Header.ty = Op.Error } in
-            return (hdr, response, Effects.nothing, read_ofs )
-          | read_ofs, `Error msg ->
-            let response = Protocol.Response.Error "EINVAL" in
-            Lwt_mutex.lock write_m >>= fun () ->
-            let hdr = Header.({ tid = -1l; rid = -1l; ty = Op.Error; len = 0 }) in
-            return (hdr, response, Effects.nothing, read_ofs )
-        ) >>= fun (hdr, response, side_effects, next_read_ofs) ->
+                 E.reply c domid perms hdr send_watch_event request >>= fun (response, side_effects) ->
+                 let hdr = Protocol.({ hdr with Header.ty = Response.get_ty response}) in
+                 return (hdr, response, side_effects, read_ofs)
+               | read_ofs, `BadRequest (hdr, msg) ->
+                 (* quirk: if this is a NULL-termination error then it should be EINVAL *)
+                 let response = Protocol.Response.Error "EINVAL" in
+                 Lwt_mutex.lock write_m >>= fun () ->
+                 let hdr = { hdr with Protocol.Header.ty = Op.Error } in
+                 return (hdr, response, Effects.nothing, read_ofs )
+               | read_ofs, `Error msg ->
+                 let response = Protocol.Response.Error "EINVAL" in
+                 Lwt_mutex.lock write_m >>= fun () ->
+                 let hdr = Header.({ tid = -1l; rid = -1l; ty = Op.Error; len = 0 }) in
+                 return (hdr, response, Effects.nothing, read_ofs )
+           ) >>= fun (hdr, response, side_effects, next_read_ofs) ->
 
-          (* If we crash here then future iterations of the loop will read
-             the same request packet. However since every connection is processed
-             concurrently we don't expect to compute the same response each time.
-             Therefore the choice of which transaction to commit may be made
-             differently each time, however the client should be unaware of this. *)
+           (* If we crash here then future iterations of the loop will read
+              the same request packet. However since every connection is processed
+              concurrently we don't expect to compute the same response each time.
+              Therefore the choice of which transaction to commit may be made
+              differently each time, however the client should be unaware of this. *)
 
-          T.enqueue t hdr response >>= fun next_write_ofs ->
-          (* If we crash here the packet will be dropped because we've not persisted
-             the side-effects, including the write_ofs value: *)
+           T.enqueue t hdr response >>= fun next_write_ofs ->
+           (* If we crash here the packet will be dropped because we've not persisted
+              the side-effects, including the write_ofs value: *)
 
-          effects := { next_read_ofs; next_write_ofs };
+           effects := { next_read_ofs; next_write_ofs };
 
-          let origin = Printf.sprintf "Transaction from connection %d domain %d"
-              (C.index c) domid in
-        loop () in
-			loop ()
+           let origin = Printf.sprintf "Transaction from connection %d domain %d"
+               (C.index c) domid in
+           loop () in
+         loop ()
       ) (fun e ->
-      info "Closing connection %d to domain %d: %s"
-        (C.index c) domid (Printexc.to_string e);
+          info "Closing connection %d to domain %d: %s"
+            (C.index c) domid (Printexc.to_string e);
     (*
 			Lwt.cancel background_watch_event_flusher;
       Mount.unmount connection_path >>= fun e1 ->
       *)
-      V.create () >>= fun v ->
-			C.destroy c >>= fun () ->
-      V.merge v (Printf.sprintf "Closing connection %d to domain %d\n\nException was: %s"
-        (C.index c) domid (Printexc.to_string e)) >>= fun ok ->
-      if not ok then error "Failed to commit closing connection transaction";
+          V.create () >>= fun v ->
+          C.destroy c >>= fun () ->
+          V.merge v (Printf.sprintf "Closing connection %d to domain %d\n\nException was: %s"
+                       (C.index c) domid (Printexc.to_string e)) >>= fun ok ->
+          if not ok then error "Failed to commit closing connection transaction";
       (*
       PEffects.destroy peffects >>= fun e3 ->
       let origin =
@@ -192,9 +192,9 @@ module Make(T: S.SERVER)(V: Persistence.PERSISTENCE) = struct
           (Connection.index c) dom (Printexc.to_string e) in
       Database.persist ~origin Transaction.(e1 ++ e2 ++ e3 ++ e4) >>= fun () ->
       *)
-      T.destroy t)
+          T.destroy t)
 
-	let serve_forever () =
-		T.listen () >>= fun server ->
-		T.accept_forever server handle_connection
+  let serve_forever () =
+    T.listen () >>= fun server ->
+    T.accept_forever server handle_connection
 end

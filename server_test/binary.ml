@@ -34,9 +34,9 @@ let rec logging_thread logger =
   >>= fun lines ->
   Lwt_list.iter_s
     (fun x ->
-      if !debug_to_stdout
-      then Lwt_io.write_line Lwt_io.stdout x
-      else return ()
+       if !debug_to_stdout
+       then Lwt_io.write_line Lwt_io.stdout x
+       else return ()
     ) lines
   >>= fun () ->
   logging_thread logger
@@ -49,8 +49,8 @@ let server_thread =
   S.serve_forever ()
 
 let fail_on_error = function
-| `Ok x -> return x
-| `Error x -> fail (Failure x)
+  | `Ok x -> return x
+  | `Error x -> fail (Failure x)
 
 let test (request, response) () =
   let open Sockets in
@@ -89,9 +89,9 @@ let _ =
     "Test xenstore server code";
 
   let suite = "xenstore" >::: (List.map (fun (x', x, y', y) ->
-    Printf.sprintf "%s -> %s" (String.escaped x') (String.escaped y')
-    >:: (fun () -> Lwt_main.run (test (x, y) ()))
-  ) Messages.all) in
+      Printf.sprintf "%s -> %s" (String.escaped x') (String.escaped y')
+      >:: (fun () -> Lwt_main.run (test (x, y) ()))
+    ) Messages.all) in
   run_test_tt ~verbose:!verbose suite
 
 

@@ -48,10 +48,10 @@ let list () =
     if List.length first < batch_size
     then first
     else match first with
-    | [] -> []
-    | x :: xs ->
-      (* Don't assume the last entry has the highest domid *)
-      let largest_domid = List.fold_left (fun domid di -> max domid di.domid) x.domid xs in
-      let rest = loop (largest_domid + 1) in
-      first @ rest in
+      | [] -> []
+      | x :: xs ->
+        (* Don't assume the last entry has the highest domid *)
+        let largest_domid = List.fold_left (fun domid di -> max domid di.domid) x.domid xs in
+        let rest = loop (largest_domid + 1) in
+        first @ rest in
   loop 0
